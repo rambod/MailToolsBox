@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name = 'MailToolsBox',
   packages = ['MailToolsBox'],
-  version = '0.0.1',
+  version = '0.0.2',
   license='MIT',
   description = 'Mail Tools boxes to make developer life easier on build mail sender or even mail server',   # Give a short description about your library
   author = 'Rambod Ghashghai',                   # Type in your name
