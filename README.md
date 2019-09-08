@@ -4,7 +4,7 @@ MailToolsBox is a Python library for dealing with Email handling in easy way.
 
 ## Installation
 
-Use the package manager [pip](https://ramai.io) to install foobar.
+Use the package manager [pip](https://ramai.io) to install MailToolsBox.
 
 ```bash
 pip install MailToolsBox
