@@ -3,10 +3,11 @@ from distutils.core import setup
 with open("README.md", "r") as fh:
   long_description = fh.read()
 
+
 setup(
   name = 'MailToolsBox',
   packages = ['MailToolsBox'],
-  version = '0.0.2',
+  version = '0.0.3',
   license='MIT',
   description = 'Mail Tools boxes to make developer life easier on build mail sender or even mail server',   # Give a short description about your library
   long_description=long_description,
