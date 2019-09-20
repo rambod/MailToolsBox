@@ -1,7 +1,7 @@
 MailToolsBox
 =============
 
-Dev Tools Library is a multiplatform tools development api, targeted to help keep you focused on writing the tools and not the connective glue code between packages.
+MailToolsBox is a Python library for dealing with Email handling in easy way.
 
 Installation
 ------------
