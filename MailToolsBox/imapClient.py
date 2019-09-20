@@ -32,18 +32,12 @@ class ImapAgent:
 
             # Header Details
             date_tuple = email.utils.parsedate_tz(email_message['Date'])
-            print(date_tuple)
             if date_tuple:
                 local_date = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple))
                 local_message_date = "%s" % (str(local_date.strftime("%a, %d %b %Y %H:%M:%S")))
             email_from = str(email.header.make_header(email.header.decode_header(email_message['From'])))
             email_to = str(email.header.make_header(email.header.decode_header(email_message['To'])))
             subject = str(email.header.make_header(email.header.decode_header(email_message['Subject'])))
-            print(email_message)
-
-            for part in email_message.walk():
-                if part.get_content_type() == "text/plain":
-                    body = part.get_payload(decode=True)
 
 
             # Body details
@@ -99,8 +93,6 @@ class ImapAgent:
     def download_mail_msg(self, path='' ,lookup='ALL'):
         self.login_account()
         result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
-        print(result)
-        print(data[0][1])
         i = len(data[0].split())
         for x in range(i):
             latest_email_uid = data[0].split()[x]

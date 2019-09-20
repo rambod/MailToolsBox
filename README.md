@@ -10,7 +10,7 @@ Use the package manager [pip](https://pypi.org/project/MailToolsBox/) to install
 pip install MailToolsBox
 ```
 
-## Send Usage
+#Send Usage
 
 ``` python
 import MailToolsBox.mailSender
@@ -18,8 +18,10 @@ mail = MailToolsBox.mailSender.SendAgent(user_email='username@gmail.com', server
 mail.send_mail(recipent_email='user@gmail.com', subject='This is Subject Text', message_Body='This is  Body Text')
 ```
 
-## Imap Usage
-``` python
+# Imap Usage
+
+<pre><code class="language-python">
+
 from MailToolsBox.imapClient import ImapAgent
 
 EMAIL_ACCOUNT = "myaddress@gmail.com"
@@ -30,7 +32,9 @@ x = ImapAgent(email_account=EMAIL_ACCOUNT, password=PASSWORD, server_address=SER
 x.download_mail_text() # optional parameter : (lookup='ALL',save=True,path='/home/user/')
 x.download_mail_json() # return json format | optional parameter : (lookup='ALL',save=True,filename='filename.json',path='/home/user/')
 x.download_mail_msg() # optional parameter : (lookup='ALL',path='/home/user/')
-```
+</code></pre>
+
+
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

@@ -9,7 +9,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 setup(
   name = 'MailToolsBox',
   packages = ['MailToolsBox'],
-  version = '0.0.4.1',
+  version = '0.0.4.3',
   license='MIT',
   description = 'Mail Tools boxes to make developer life easier on build mail sender or even mail server',   # Give a short description about your library
   long_description=long_description,
@@ -17,7 +17,7 @@ setup(
   author = 'Rambod Ghashghai',                   # Type in your name
   author_email = 'rambod@ramai.io',      # Type in your E-Mail
   url = 'https://www.ramai.io',   # Provide either the link to your github or to your website
-  download_url = 'https://github.com/rambod/MailToolsBox/archive/0.0.4.1.tar.gz',    # I explain this later on
+  download_url = 'https://github.com/rambod/MailToolsBox/archive/0.0.4.3.tar.gz',    # I explain this later on
   keywords = ['Mail', 'Server', 'smtp' ,  'send' , 'email', 'tools', 'box'],   # Keywords that define your package best
   install_requires=[
     # I get to this in a second
