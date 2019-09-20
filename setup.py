@@ -17,7 +17,7 @@ setup(
   author = 'Rambod Ghashghai',                   # Type in your name
   author_email = 'rambod@ramai.io',      # Type in your E-Mail
   url = 'https://www.ramai.io',   # Provide either the link to your github or to your website
-  download_url = 'https://github.com/rambod/MailToolsBox/archive/0.0.4.3.tar.gz',    # I explain this later on
+  download_url = 'https://github.com/rambod/MailToolsBox/archive/0.0.4.4.tar.gz',    # I explain this later on
   keywords = ['Mail', 'Server', 'smtp' ,  'send' , 'email', 'tools', 'box'],   # Keywords that define your package best
   install_requires=[
     # I get to this in a second
