@@ -1,5 +1,5 @@
 MailToolsBox
-=============
+------------
 
 MailToolsBox is a Python library for dealing with Email handling in easy way.
 
