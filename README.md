@@ -12,22 +12,24 @@ pip install MailToolsBox
 
 ## Send Usage
 
-```
+``` python
 import MailToolsBox.mailSender
 mail = MailToolsBox.mailSender.SendAgent(user_email='username@gmail.com', server_smtp_address='smtp.gmail.com', user_email_password='User Password', port=587)
 mail.send_mail(recipent_email='user@gmail.com', subject='This is Subject Text', message_Body='This is  Body Text')
 ```
 
 ## Imap Usage
-```
+``` python
 from MailToolsBox.imapClient import ImapAgent
 
 EMAIL_ACCOUNT = "myaddress@gmail.com"
 PASSWORD = "mypassword"
 SERVER_ADDRESS = ('my server address or domain name or ip ex:"imap.gmail.com" ')
+
 x = ImapAgent(email_account=EMAIL_ACCOUNT, password=PASSWORD, server_address=SERVER_ADDRESS)
-x.download_mail_text(lookup='ALL',save=True)
-x.download_mail_json(lookup='ALL',save=True) # return json format
+x.download_mail_text() # optional parameter : (lookup='ALL',save=True,path='/home/user/')
+x.download_mail_json() # return json format | optional parameter : (lookup='ALL',save=True,filename='filename.json',path='/home/user/')
+x.download_mail_msg() # optional parameter : (lookup='ALL',path='/home/user/')
 ```
 
 ## Contributing

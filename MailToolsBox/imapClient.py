@@ -16,7 +16,8 @@ class ImapAgent:
         self.mail.list()
         self.mail.select('inbox')
 
-    def download_mail_text(self, lookup):
+
+    def download_mail_text(self, path='',lookup='ALL'):
         self.login_account()
         result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
         i = len(data[0].split())
@@ -38,24 +39,26 @@ class ImapAgent:
             email_from = str(email.header.make_header(email.header.decode_header(email_message['From'])))
             email_to = str(email.header.make_header(email.header.decode_header(email_message['To'])))
             subject = str(email.header.make_header(email.header.decode_header(email_message['Subject'])))
-            print(email_from)
-            print(email_to)
-            print(subject)
+            print(email_message)
+
+            for part in email_message.walk():
+                if part.get_content_type() == "text/plain":
+                    body = part.get_payload(decode=True)
+
+
             # Body details
             for part in email_message.walk():
                 if part.get_content_type() == "text/plain":
                     body = part.get_payload(decode=True)
-                    print(body)
-                    file_name = "email_" + str(x) + ".txt"
+                    file_name = path+"email_" + str(x) + ".txt"
                     output_file = open(file_name, 'w')
                     output_file.write("From: %s\nTo: %s\nDate: %s\nSubject: %s\n\nBody: \n\n%s" % (
                     email_from, email_to, local_message_date, subject, body.decode('utf-8')))
                     output_file.close()
-                    print('Done')
                 else:
                     continue
 
-    def download_mail_json(self, lookup,save=False,file_name='mail.json'):
+    def download_mail_json(self, lookup,save=False,path='',file_name='mail.json'):
         save_json = save
         self.login_account()
         result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
@@ -88,8 +91,29 @@ class ImapAgent:
                     continue
         if save_json == True:
             json_file_name = file_name
-            output_file = open(json_file_name, 'w')
+            output_file = open(path + json_file_name, 'w')
             output_file.write(json.dumps(mail_items))
             output_file.close()
         return json.dumps(mail_items)
+
+    def download_mail_msg(self, path='' ,lookup='ALL'):
+        self.login_account()
+        result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
+        print(result)
+        print(data[0][1])
+        i = len(data[0].split())
+        for x in range(i):
+            latest_email_uid = data[0].split()[x]
+            result, email_data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
+            # result, email_data = conn.store(num,'-FLAGS','\\Seen')
+            # this might work to set flag to seen, if it doesn't already
+            raw_email = email_data[0][1]
+            raw_email_string = raw_email.decode('utf-8')
+            email_message = email.message_from_string(raw_email_string)
+            str(email_message)
+            file_name = path + "email_" + str(x) + ".msg"
+            output_file = open(file_name, 'w')
+            output_file.write(str(email_message))
+            output_file.close()
+
 
