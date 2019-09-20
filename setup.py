@@ -9,11 +9,11 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 setup(
   name = 'MailToolsBox',
   packages = ['MailToolsBox'],
-  version = '0.0.4.3',
+  version = '0.0.4.4',
   license='MIT',
   description = 'Mail Tools boxes to make developer life easier on build mail sender or even mail server',   # Give a short description about your library
-  long_description=long_description,
-  long_description_content_type="text/markdown",
+  long_description=open('README.rst').read(),
+  long_description_content_type="text/rst",
   author = 'Rambod Ghashghai',                   # Type in your name
   author_email = 'rambod@ramai.io',      # Type in your E-Mail
   url = 'https://www.ramai.io',   # Provide either the link to your github or to your website
