@@ -13,10 +13,13 @@ class SendAgent:
         self.msg['From'] = self.user_email
         self.server = smtplib.SMTP(self.server_smtp_address,self.port)
 
-    def send_mail(self, recipient_email, subject, message_body, ):
+    def send_mail(self, recipient_email, subject, message_body, tls=True ):
         self.msg['Subject'] = subject
         self.msg['To'] = recipient_email
-        self.server.starttls()
+        if tls == True:
+            self.server.starttls()
+        else:
+            pass
         self.server.login(self.user_email,self.user_email_password)
         body = message_body
         self.msg.attach(MIMEText(body, 'plain'))

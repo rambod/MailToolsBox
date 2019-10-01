@@ -8,6 +8,7 @@ Installation
 Use the package manager https://pypi.org/project/MailToolsBox/ to install MailToolsBox.
 
 
+
 .. code-block:: bash
 
         pip install MailToolsBox
