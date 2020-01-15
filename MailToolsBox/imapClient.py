@@ -52,7 +52,7 @@ class ImapAgent:
                 else:
                     continue
 
-    def download_mail_json(self, lookup,save=False,path='',file_name='mail.json'):
+    def download_mail_json(self, lookup='ALL',save=False,path='',file_name='mail.json',):
         save_json = save
         self.login_account()
         result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
@@ -109,3 +109,10 @@ class ImapAgent:
             output_file.close()
 
 
+if __name__ == '__main__':
+    EMAIL_ACCOUNT = "rambod.gh@tehranraymand.com"
+    PASSWORD = "rmbdios2012"
+    SERVER_ADDRESS = ('192.168.43.30')
+
+    x = ImapAgent(email_account=EMAIL_ACCOUNT, password=PASSWORD, server_address=SERVER_ADDRESS)
+    x.download_mail_text(lookup='ALL')
