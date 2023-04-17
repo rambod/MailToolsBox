@@ -1,7 +1,8 @@
-import datetime
-import email
 import imaplib
+import email
 import json
+import datetime
+from typing import List
 
 
 class ImapAgent:
@@ -9,110 +10,110 @@ class ImapAgent:
         self.email_account = email_account
         self.password = password
         self.server_address = server_address
-        self.mail = imaplib.IMAP4_SSL(self.server_address)
+        self.mail = None
 
     def login_account(self):
+        self.mail = imaplib.IMAP4_SSL(self.server_address)
         self.mail.login(self.email_account, self.password)
-        self.mail.list()
-        self.mail.select('inbox')
 
+    def download_mail_text(self, path='', mailbox='INBOX'):
+        with open(f'{path}email.txt', 'w') as f:
+            self.mail.select(mailbox)
+            _, data = self.mail.uid('search', None, 'ALL')
+            uids = data[0].split()
+            for uid in uids:
+                _, email_data = self.mail.uid('fetch', uid, '(RFC822)')
+                raw_email = email_data[0][1]
+                raw_email_string = raw_email.decode('utf-8')
+                email_message = email.message_from_string(raw_email_string)
 
-    def download_mail_text(self, path='',lookup='ALL'):
-        self.login_account()
-        result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
-        i = len(data[0].split())
-        for x in range(i):
-            latest_email_uid = data[0].split()[x]
-            result, email_data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
-            # result, email_data = conn.store(num,'-FLAGS','\\Seen')
-            # this might work to set flag to seen, if it doesn't already
-            raw_email = email_data[0][1]
-            raw_email_string = raw_email.decode('utf-8')
-            email_message = email.message_from_string(raw_email_string)
+                # Header Details
+                date_tuple = email.utils.parsedate_tz(email_message['Date'])
+                if date_tuple:
+                    local_date = datetime.datetime.fromtimestamp(
+                        email.utils.mktime_tz(date_tuple))
+                    local_message_date = local_date.strftime(
+                        "%a, %d %b %Y %H:%M:%S")
+                email_from = str(email.header.make_header(
+                    email.header.decode_header(email_message['From'])))
+                email_to = str(email.header.make_header(
+                    email.header.decode_header(email_message['To'])))
+                subject = str(email.header.make_header(
+                    email.header.decode_header(email_message['Subject'])))
 
-            # Header Details
-            date_tuple = email.utils.parsedate_tz(email_message['Date'])
-            if date_tuple:
-                local_date = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple))
-                local_message_date = "%s" % (str(local_date.strftime("%a, %d %b %Y %H:%M:%S")))
-            email_from = str(email.header.make_header(email.header.decode_header(email_message['From'])))
-            email_to = str(email.header.make_header(email.header.decode_header(email_message['To'])))
-            subject = str(email.header.make_header(email.header.decode_header(email_message['Subject'])))
+                # Body details
+                for part in email_message.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload(decode=True)
+                        f.write(
+                            f"From: {email_from}\nTo: {email_to}\nDate: {local_message_date}\nSubject: {subject}\n\nBody:\n\n{body.decode('utf-8')}\n\n")
+        self.mail.close()
 
+    import json
 
-            # Body details
-            for part in email_message.walk():
-                if part.get_content_type() == "text/plain":
-                    body = part.get_payload(decode=True)
-                    file_name = path+"email_" + str(x) + ".txt"
-                    output_file = open(file_name, 'w')
-                    output_file.write("From: %s\nTo: %s\nDate: %s\nSubject: %s\n\nBody: \n\n%s" % (
-                    email_from, email_to, local_message_date, subject, body.decode('utf-8')))
-                    output_file.close()
-                else:
-                    continue
-
-    def download_mail_json(self, lookup='ALL',save=False,path='',file_name='mail.json',):
+    def download_mail_json(self, lookup: str = 'ALL', save: bool = False, path: str = '', file_name: str = 'mail.json') -> str:
         save_json = save
         self.login_account()
-        result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
-        i = len(data[0].split())
-        mail_items = []
-        for x in range(i):
-            latest_email_uid = data[0].split()[x]
-            result, email_data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
-            raw_email = email_data[0][1]
-            raw_email_string = raw_email.decode('utf-8')
-            email_message = email.message_from_string(raw_email_string)
-            date_tuple = email.utils.parsedate_tz(email_message['Date'])
-            if date_tuple:
-                local_date = datetime.datetime.fromtimestamp(email.utils.mktime_tz(date_tuple))
-                local_message_date = "%s" % (str(local_date.strftime("%a, %d %b %Y %H:%M:%S")))
-            email_from = str(email.header.make_header(email.header.decode_header(email_message['From'])))
-            email_to = str(email.header.make_header(email.header.decode_header(email_message['To'])))
-            subject = str(email.header.make_header(email.header.decode_header(email_message['Subject'])))
-            for part in email_message.walk():
-                if part.get_content_type() == "text/plain":
-                    body = part.get_payload(decode=True)
-                    mail_items.append({
-                        'email_from': email_from,
-                        'email_to': email_to,
-                        'local_message_date': local_message_date,
-                        'subject': subject,
-                        'body': body.decode('utf-8'),
-                    })
+
+        with imaplib.IMAP4_SSL(self.imap_server) as mail:
+            mail.login(self.username, self.password)
+            mail.select("inbox")
+            result, data = mail.uid('search', None, lookup)  # (ALL/UNSEEN)
+            uids = data[0].split()
+            mail_items: List[dict] = []
+
+            for uid in uids:
+                result, email_data = mail.uid('fetch', uid, '(RFC822)')
+                raw_email = email_data[0][1]
+                raw_email_string = raw_email.decode('utf-8')
+                email_message = email.message_from_string(raw_email_string)
+                date_tuple = email.utils.parsedate_tz(email_message['Date'])
+                if date_tuple:
+                    local_date = datetime.datetime.fromtimestamp(
+                        email.utils.mktime_tz(date_tuple))
+                    local_message_date = f"{local_date.strftime('%a, %d %b %Y %H:%M:%S')}"
+                email_from = str(email.header.make_header(
+                    email.header.decode_header(email_message['From'])))
+                email_to = str(email.header.make_header(
+                    email.header.decode_header(email_message['To'])))
+                subject = str(email.header.make_header(
+                    email.header.decode_header(email_message['Subject'])))
+                body = ''
+
+                for part in email_message.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload(decode=True).decode('utf-8')
+                        break
                 else:
                     continue
-        if save_json == True:
-            json_file_name = file_name
-            output_file = open(path + json_file_name, 'w')
-            output_file.write(json.dumps(mail_items))
-            output_file.close()
-        return json.dumps(mail_items)
 
-    def download_mail_msg(self, path='' ,lookup='ALL'):
+                mail_items.append({
+                    'email_from': email_from,
+                    'email_to': email_to,
+                    'local_message_date': local_message_date,
+                    'subject': subject,
+                    'body': body,
+                })
+
+            mail.close()
+            mail.logout()
+
+        mail_items_json = json.dumps(mail_items)
+
+        if save_json:
+            with open(f"{path}{file_name}", 'w') as f:
+                f.write(mail_items_json)
+
+        return mail_items_json
+
+    def download_mail_msg(self, path='', lookup='ALL'):
         self.login_account()
         result, data = self.mail.uid('search', None, lookup)  # (ALL/UNSEEN)
-        i = len(data[0].split())
-        for x in range(i):
-            latest_email_uid = data[0].split()[x]
-            result, email_data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
-            # result, email_data = conn.store(num,'-FLAGS','\\Seen')
-            # this might work to set flag to seen, if it doesn't already
+        for i, latest_email_uid in enumerate(data[0].split()):
+            result, email_data = self.mail.uid(
+                'fetch', latest_email_uid, '(RFC822)')
             raw_email = email_data[0][1]
-            raw_email_string = raw_email.decode('utf-8')
-            email_message = email.message_from_string(raw_email_string)
-            str(email_message)
-            file_name = path + "email_" + str(x) + ".msg"
-            output_file = open(file_name, 'w')
-            output_file.write(str(email_message))
-            output_file.close()
-
-
-if __name__ == '__main__':
-    EMAIL_ACCOUNT = "rambod.gh@tehranraymand.com"
-    PASSWORD = "rmbdios2012"
-    SERVER_ADDRESS = ('192.168.43.30')
-
-    x = ImapAgent(email_account=EMAIL_ACCOUNT, password=PASSWORD, server_address=SERVER_ADDRESS)
-    x.download_mail_text(lookup='ALL')
+            email_message = email.message_from_bytes(raw_email)
+            file_name = f"{path}email_{i}.msg"
+            with open(file_name, 'w') as f:
+                f.write(email_message.as_string())
