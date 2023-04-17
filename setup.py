@@ -8,8 +8,8 @@ setup(
     license='MIT',
     # Give a short description about your library
     description='Mail tools simplify mail server and sender development for developers.',
-    long_description=open('README.rst').read(),
-    long_description_content_type="text/rst",
+    long_description=open('README.md').read(),
+    long_description_content_type="text/markdown",
     author='Rambod Ghashghai',                   # Type in your name
     author_email='rambod@ramai.io',      # Type in your E-Mail
     # Provide either the link to your github or to your website
