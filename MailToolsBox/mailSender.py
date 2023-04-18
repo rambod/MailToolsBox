@@ -52,7 +52,7 @@ class SendAgent:
                     self.msg.attach(attachment_part)
 
             # recipients = [recipient_email] + cc if cc else [recipient_email]
-            recipients = [recipient_email]
+            recipients = recipient_email
             self.server.sendmail(
                 self.user_email, recipients, self.msg.as_string())
 

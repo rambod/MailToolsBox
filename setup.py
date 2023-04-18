@@ -4,7 +4,7 @@ from distutils.core import setup
 setup(
     name='MailToolsBox',
     packages=['MailToolsBox'],
-    version='0.1.0.3',
+    version='0.1.0.4',
     license='MIT',
     # Give a short description about your library
     description='Mail tools simplify mail server and sender development for developers.',
