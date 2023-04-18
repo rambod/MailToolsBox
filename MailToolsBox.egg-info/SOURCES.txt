@@ -1,0 +1,11 @@
+LICENSE.txt
+README.md
+setup.py
+MailToolsBox/__init__.py
+MailToolsBox/imapClient.py
+MailToolsBox/mailSender.py
+MailToolsBox.egg-info/PKG-INFO
+MailToolsBox.egg-info/SOURCES.txt
+MailToolsBox.egg-info/dependency_links.txt
+MailToolsBox.egg-info/requires.txt
+MailToolsBox.egg-info/top_level.txt
