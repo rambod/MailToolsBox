@@ -20,13 +20,20 @@ class SendAgent:
         self.msg['From'] = self.user_email
         self.server = smtplib.SMTP(self.server_smtp_address, self.port)
 
-    def send_mail(self, recipient_email: str, subject: str, message_body: str, cc: Optional[List[str]] = None,
-                  attachments: Optional[List[str]] = None, tls: bool = True, server_quit: bool = False) -> None:
+    def send_mail(self, recipient_email: Optional[List[str]], subject: str, message_body: str, cc: Optional[List[str]] = None,
+                  bcc: Optional[List[str]] = None, attachments: Optional[List[str]] = None, tls: bool = True, server_quit: bool = False) -> None:
         try:
             self.msg['Subject'] = subject
-            self.msg['To'] = recipient_email
+            # self.msg['To'] = recipient_email
+            self.msg['To'] = COMMASPACE.join(recipient_email) if not isinstance(
+                recipient_email, str) else recipient_email
             if cc:
-                self.msg['Cc'] = COMMASPACE.join(cc)
+                # self.msg['Cc'] = COMMASPACE.join(cc)
+                self.msg['Cc'] = COMMASPACE.join(
+                    cc) if not isinstance(cc, str) else cc
+            if bcc:
+                self.msg['Bcc'] = COMMASPACE.join(
+                    bcc) if not isinstance(bcc, str) else bcc
             if tls:
                 self.server.starttls()
             self.server.login(self.user_email, self.user_email_password)
@@ -44,7 +51,8 @@ class SendAgent:
                         'Content-Disposition'] = f'attachment; filename="{os.path.basename(attachment)}"'
                     self.msg.attach(attachment_part)
 
-            recipients = [recipient_email] + cc if cc else [recipient_email]
+            # recipients = [recipient_email] + cc if cc else [recipient_email]
+            recipients = [recipient_email]
             self.server.sendmail(
                 self.user_email, recipients, self.msg.as_string())
 
