@@ -1,140 +1,204 @@
 # MailToolsBox
 
-MailToolsBox is a Python package that provides two classes to help you
-interact with emails: SendAgent and ImapAgent.
+MailToolsBox is a modern, feature-rich Python package designed for sending and managing emails with ease. It provides robust functionality for handling SMTP email sending, template-based emails using Jinja2, attachments, CC/BCC support, and email validation. Additionally, MailToolsBox ensures backward compatibility with legacy implementations.
 
-# Installation
+## Features
 
-Use the package manager PyPI <https://pypi.org/project/MailToolsBox/> to
-install MailToolsBox.
+- **Send emails via SMTP with ease**
+- **Support for multiple recipients (To, CC, BCC)**
+- **HTML and plain text email support**
+- **Attachment handling**
+- **Template-based email rendering using Jinja2**
+- **Secure email transactions with TLS/SSL**
+- **Email address validation**
+- **Logging for debugging and monitoring**
+- **Backward compatibility with `SendAgent`**
 
-You can install MailToolsBox via pip:
+---
+
+## Installation
+
+Install MailToolsBox from PyPI using pip:
 
 ```bash
 pip install MailToolsBox
 ```
 
-SendAgent Class (Send SMTP Usage) \-\-\-\-\-\-\-\-\-\-\-\-\-\--The
-SendAgent class allows you to send emails through SMTP. Here is an
-example of how to use this class:
+---
 
-```pycon
+## Getting Started
+
+### 1. **Sending a Basic Email**
+
+The `EmailSender` class is the primary interface for sending emails. Below is an example of sending a simple plain text email:
+
+```python
+from MailToolsBox import EmailSender
+
+# Email configuration
+sender = EmailSender(
+    user_email="your@email.com",
+    server_smtp_address="smtp.example.com",
+    user_email_password="yourpassword",
+    port=587
+)
+
+# Sending email
+sender.send(
+    recipients=["recipient@example.com"],
+    subject="Test Email",
+    message_body="Hello, this is a test email!"
+)
+```
+
+---
+
+### 2. **Sending an HTML Email with Attachments**
+
+```python
+sender.send(
+    recipients=["recipient@example.com"],
+    subject="HTML Email Example",
+    message_body="""<h1>Welcome!</h1><p>This is an <strong>HTML email</strong>.</p>""",
+
+    html=True,
+    attachments=["/path/to/document.pdf"]
+)
+```
+
+---
+
+### 3. **Using Email Templates (Jinja2)**
+
+MailToolsBox allows sending emails using Jinja2 templates stored in the `templates/` directory.
+
+#### **Example Template (`templates/welcome.html`)**:
+
+```html
+<html>
+<head>
+    <title>Welcome</title>
+</head>
+<body>
+    <h1>Welcome, {{ username }}!</h1>
+    <p>Click <a href="{{ activation_link }}">here</a> to activate your account.</p>
+</body>
+</html>
+```
+
+#### **Sending an Email with a Template**:
+
+```python
+context = {
+    "username": "John Doe",
+    "activation_link": "https://example.com/activate"
+}
+
+sender.send_template(
+    recipient="recipient@example.com",
+    subject="Welcome to Our Service",
+    template_name="welcome.html",
+    context=context
+)
+```
+
+---
+
+### 4. **CC, BCC, and Multiple Recipients**
+
+```python
+sender.send(
+    recipients=["recipient@example.com"],
+    subject="CC & BCC Example",
+    message_body="This email has CC and BCC recipients!",
+    cc=["cc@example.com"],
+    bcc=["bcc@example.com"]
+)
+```
+
+---
+
+### 5. **Backward Compatibility with `SendAgent`**
+
+For those migrating from earlier versions, `SendAgent` ensures seamless compatibility:
+
+```python
 from MailToolsBox import SendAgent
 
-user_email = "example@gmail.com"
-user_email_password = "password"
-server_smtp_address = "smtp.gmail.com"
-port = 587
+legacy_sender = SendAgent(
+    user_email="your@email.com",
+    server_smtp_address="smtp.example.com",
+    user_email_password="yourpassword",
+    port=587
+)
 
-send_agent = SendAgent(user_email, server_smtp_address, user_email_password, port)
-recipient_email = "example@example.com"
-subject = "Test email"
-message_body = "This is a test email sent from MailToolsBox."
-send_agent.send_mail(recipient_email, subject, message_body)
+legacy_sender.send_mail(
+    recipient_email=["recipient@example.com"],
+    subject="Legacy Compatibility Test",
+    message_body="Testing backward compatibility."
+)
 ```
 
-# send_mail method
+---
 
-The send_mail method sends an email to one or more recipients and optionally includes attachments.
+## Configuration & Security Best Practices
 
-Parameters:
-recipient_email: the email address of the recipient. Can be a string or a list of strings for multiple recipients.
-subject: the subject of the email.
-message_body: the body of the email.
-cc (optional): a list of email addresses to be included in the CC field.
-bcc (optional): a list of email addresses to be included in the BCC field.
-attachments (optional): a list of file paths to be attached to the email.
-tls (optional, default True): enable Transport Layer Security.
-server_quit (optional, default False): whether to quit the SMTP server after sending the email.
+- **Use environment variables** instead of hardcoding credentials.
+- **Enable 2FA** on your email provider and use app passwords if required.
+- **Use TLS/SSL** to ensure secure email delivery.
 
-# ImapAgent Class
+Example using environment variables:
 
-The ImapAgent class provides functionality for connecting to an email
-server via the Internet Message Access Protocol (IMAP) and downloading
-emails from the server.
+```python
+import os
 
-# IMAP CLIENT Usage
-
-To use the ImapAgent class, you first need to create an instance of the
-class and provide your email account information and the address of the
-email server that you want to connect to:
-
-```pycon
-from MailToolsBox import ImapAgent
-
-email_account = 'your_email@example.com'
-password = 'your_email_password'
-server_address = 'imap.example.com'
-
-imap_agent = ImapAgent(email_account, password, server_address)
-imap_agent.download_mail_text() # optional parameter : (lookup='ALL',save=True,path='/home/user/')
-imap_agent.download_mail_json() # return json format | optional parameter : (lookup='ALL',save=True,filename='filename.json',path='/home/user/')
-imap_agent.download_mail_msg() # optional parameter : (lookup='ALL',path='/home/user/')
-
+sender = EmailSender(
+    user_email=os.getenv("EMAIL"),
+    server_smtp_address=os.getenv("SMTP_SERVER"),
+    user_email_password=os.getenv("EMAIL_PASSWORD"),
+    port=int(os.getenv("SMTP_PORT", 587))
+)
 ```
 
-# Methods
+---
 
-login_account(): This method connects to the email server and logs in to
-your email account using your email address and password.
+## Error Handling & Logging
 
-download_mail_text(): This method downloads the text content of all the
-emails in the specified mailbox and saves the content to a text file.
-The method takes the following parameters:
+MailToolsBox provides built-in logging to help debug issues:
 
-path (optional): The path where you want to save the text file. If not
-specified, the text file will be saved in the current working directory.
-
-mailbox (optional): The name of the mailbox that you want to download
-emails from. If not specified, the emails in the INBOX mailbox will be
-downloaded.
-
-# Attachment, CC, and BCC
-
-MailToolsBox provides additional features such as the ability to send email attachments, specify CC and BCC recipients, in addition to the recipient_email parameter.
-
-# Attachments
-
-To include attachments in your email, you can pass a list of file paths to the attachments parameter in the send_mail() method. MailToolsBox will read the attachment files and add them as MIMEApplication objects to your email message.
-
-# CC and BCC
-
-To specify CC and BCC recipients, you can pass a list of email addresses to the cc and bcc parameters in the send_mail() method. The addresses will be added to the email message headers.
-
-Here is an example of how to use the cc and bcc parameters:
-
-```pycon
-from MailToolsBox import SendAgent
-
-user_email = "example@gmail.com"
-user_email_password = "password"
-server_smtp_address = "smtp.gmail.com"
-port = 587
-
-send_agent = SendAgent(user_email, server_smtp_address, user_email_password, port)
-recipient_email = "example@example.com"
-cc = ["example2@example.com", "example3@example.com"]
-bcc = ["example4@example.com"]
-subject = "Test email"
-message_body = "This is a test email sent from MailToolsBox."
-attachments = ["path/to/file1.pdf", "path/to/file2.txt"]
-send_agent.send_mail(recipient_email, subject, message_body, cc=cc, bcc=bcc, attachments=attachments)
-
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
 ```
 
-In this example, the email is sent to recipient_email, with CC recipients example2@example.com and example3@example.com, and BCC recipient example4@example.com. The email also contains two attachments: file1.pdf and file2.txt.
+Example of handling exceptions:
 
-# Conclusion
+```python
+try:
+    sender.send(
+        recipients=["recipient@example.com"],
+        subject="Error Handling Test",
+        message_body="This is a test email."
+    )
+except Exception as e:
+    print(f"Failed to send email: {e}")
+```
 
-MailToolsBox provides a simple and easy-to-use interface for sending and receiving emails. With the SendAgent and ImapAgent classes, you can easily integrate email functionality into your Python applications.
+---
 
-# Contributing
+## Contributing
 
-Pull requests are welcome. For major changes, please open an issue first
-to discuss what you would like to change.
+MailToolsBox is an open-source project. Contributions are welcome! To contribute:
 
-Please make sure to update tests as appropriate.
+1. Fork the repository on GitHub.
+2. Create a new feature branch.
+3. Implement changes and write tests.
+4. Submit a pull request for review.
 
-# License
+For discussions, visit **[rambod.net](https://www.rambod.net)**.
 
-MIT \| <https://choosealicense.com/licenses/mit/>
+---
+
+## License
+
+MailToolsBox is licensed under the MIT License. See the [LICENSE](https://choosealicense.com/licenses/mit/) for details.

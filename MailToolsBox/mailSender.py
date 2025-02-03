@@ -2,90 +2,217 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-from email.mime.image import MIMEImage
-from email.mime.text import MIMEText
-from email.utils import COMMASPACE
-from jinja2 import Template
-import os
-from typing import List, Optional
+from email.utils import COMMASPACE, formatdate
+from jinja2 import Template, Environment, FileSystemLoader, select_autoescape
+from typing import List, Optional, Iterable
+from pathlib import Path
+import logging
+from ssl import create_default_context
+from email_validator import validate_email, EmailNotValidError
+
+# Set up logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
-class SendAgent:
-    def __init__(self, user_email: str, server_smtp_address: str, user_email_password: str, port: int) -> None:
-        self.user_email = user_email
+class EmailSender:
+    """Modern email sender with sync/async support and enhanced features."""
+
+    def __init__(
+            self,
+            user_email: str,
+            server_smtp_address: str,
+            user_email_password: str,
+            port: int = 587,
+            timeout: int = 10,
+            validate_emails: bool = True
+    ) -> None:
+        self.user_email = self._validate_email(user_email) if validate_emails else user_email
         self.user_email_password = user_email_password
         self.server_smtp_address = server_smtp_address
         self.port = port
-        self.msg = MIMEMultipart()
-        self.msg['From'] = self.user_email
-        self.server = smtplib.SMTP(self.server_smtp_address, self.port)
+        self.timeout = timeout
+        self.validate_emails = validate_emails
+        self.template_env = Environment(
+            loader=FileSystemLoader('templates'),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
+        self.ssl_context = create_default_context()
 
-    def send_mail(self, recipient_email: Optional[List[str]], subject: str, message_body: str, cc: Optional[List[str]] = None,
-                  bcc: Optional[List[str]] = None, attachments: Optional[List[str]] = None, tls: bool = True, server_quit: bool = False) -> None:
+    def _validate_email(self, email_address: str) -> str:
+        """Validate and normalize email address using email-validator."""
         try:
-            self.msg['Subject'] = subject
-            # self.msg['To'] = recipient_email
-            self.msg['To'] = COMMASPACE.join(recipient_email) if not isinstance(
-                recipient_email, str) else recipient_email
-            if cc:
-                # self.msg['Cc'] = COMMASPACE.join(cc)
-                self.msg['Cc'] = COMMASPACE.join(
-                    cc) if not isinstance(cc, str) else cc
-            if bcc:
-                self.msg['Bcc'] = COMMASPACE.join(
-                    bcc) if not isinstance(bcc, str) else bcc
-            if tls:
-                self.server.starttls()
-            self.server.login(self.user_email, self.user_email_password)
+            result = validate_email(email_address, check_deliverability=False)
+            return result.normalized
+        except EmailNotValidError as e:
+            logger.error(f"Invalid email address: {email_address}")
+            raise ValueError(f"Invalid email address: {email_address}") from e
 
-            body = MIMEText(message_body, 'html')
-            self.msg.attach(body)
+    def _create_base_message(
+            self,
+            subject: str,
+            recipients: Iterable[str],
+            cc: Optional[Iterable[str]] = None,
+            bcc: Optional[Iterable[str]] = None
+    ) -> MIMEMultipart:
+        """Create MIME message with proper headers."""
+        msg = MIMEMultipart()
+        msg['From'] = self.user_email
+        msg['Subject'] = subject
+        msg['Date'] = formatdate(localtime=True)
 
-            if attachments:
-                for attachment in attachments:
-                    with open(attachment, "rb") as attachment_file:
-                        attachment_data = attachment_file.read()
-                    attachment_part = MIMEApplication(
-                        attachment_data, Name=os.path.basename(attachment))
-                    attachment_part[
-                        'Content-Disposition'] = f'attachment; filename="{os.path.basename(attachment)}"'
-                    self.msg.attach(attachment_part)
+        if self.validate_emails:
+            recipients = [self._validate_email(r) for r in recipients]
 
-            # recipients = [recipient_email] + cc if cc else [recipient_email]
-            recipients = recipient_email
-            self.server.sendmail(
-                self.user_email, recipients, self.msg.as_string())
+        msg['To'] = COMMASPACE.join(recipients)
 
-        except (smtplib.SMTPException, FileNotFoundError) as e:
-            print(f"An error occurred while sending the email: {e}")
-        finally:
-            if server_quit:
-                self.server.quit()
+        if cc:
+            validated_cc = [self._validate_email(c) for c in cc] if self.validate_emails else cc
+            msg['Cc'] = COMMASPACE.join(validated_cc)
 
-    def send_mail_multiple_recipients(self, recipients_email: List[str], subject: str, message_body: str,
-                                      cc: Optional[List[str]] = None, attachments: Optional[List[str]] = None,
-                                      tls: bool = True, server_quit: bool = False) -> None:
+        if bcc:
+            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else bcc
+            msg['Bcc'] = COMMASPACE.join(validated_bcc)
+
+        return msg
+
+    def _add_attachments(self, msg: MIMEMultipart, attachments: Iterable[str]) -> None:
+        """Add multiple attachments to the message."""
+        for file_path in attachments:
+            path = Path(file_path)
+            if not path.exists():
+                logger.warning(f"Attachment not found: {file_path}")
+                continue
+
+            with open(path, 'rb') as f:
+                part = MIMEApplication(
+                    f.read(),
+                    Name=path.name
+                )
+            part['Content-Disposition'] = f'attachment; filename="{path.name}"'
+            msg.attach(part)
+
+
+    def send(
+            self,
+            recipients: Iterable[str],
+            subject: str,
+            message_body: str,
+            cc: Optional[Iterable[str]] = None,
+            bcc: Optional[Iterable[str]] = None,
+            attachments: Optional[Iterable[str]] = None,
+            use_tls: bool = True,
+            html: bool = False
+    ) -> None:
+        """Synchronous email sending with improved error handling."""
+        msg = self._create_base_message(subject, recipients, cc, bcc)
+        msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
+
+        if attachments:
+            self._add_attachments(msg, attachments)
+
         try:
-            for recipient_email in recipients_email:
-                self.send_mail(recipient_email, subject,
-                               message_body, cc, attachments, tls=False)
-        except (smtplib.SMTPException, FileNotFoundError) as e:
-            print(f"An error occurred while sending the email: {e}")
-        finally:
-            if server_quit:
-                self.server.quit()
+            with smtplib.SMTP(self.server_smtp_address, self.port, timeout=self.timeout) as server:
+                if use_tls:
+                    server.starttls(context=self.ssl_context)
+                server.login(self.user_email, self.user_email_password)
+                server.send_message(msg)
+        except smtplib.SMTPException as e:
+            logger.error(f"SMTP error occurred: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            raise
 
-    def send_mail_with_template(self, recipient_email: str, subject: str, template_path: str,
-                                template_vars: dict, cc: Optional[List[str]] = None,
-                                attachments: Optional[List[str]] = None, tls: bool = True,
-                                server_quit: bool = False) -> None:
-        with open(template_path) as template_file:
-            template_content = template_file.read()
-        template = Template(template_content)
-        message_body = template.render(**template_vars)
+    def send_template(
+            self,
+            recipient: str,
+            subject: str,
+            template_name: str,
+            context: dict,
+            cc: Optional[Iterable[str]] = None,
+            attachments: Optional[Iterable[str]] = None,
+            use_tls: bool = True
+    ) -> None:
+        """Send email using Jinja2 template with autoescaping."""
+        template = self.template_env.get_template(template_name)
+        html_content = template.render(**context)
+        self.send([recipient], subject, html_content, cc=cc, attachments=attachments, use_tls=use_tls, html=True)
 
-        self.send_mail(recipient_email, subject, message_body,
-                       cc, attachments, tls, server_quit)
+
+
+# Backward compatibility layer
+class SendAgent(EmailSender):
+    """Legacy compatibility layer maintaining original interface."""
+
+    def send_mail(
+            self,
+            recipient_email: Optional[List[str]],
+            subject: str,
+            message_body: str,
+            cc: Optional[List[str]] = None,
+            bcc: Optional[List[str]] = None,
+            attachments: Optional[List[str]] = None,
+            tls: bool = True,
+            server_quit: bool = False
+    ) -> None:
+        logger.warning("SendAgent is deprecated, use EmailSender instead")
+
+        # Convert parameters to new format
+        self.send(
+            recipients=recipient_email,
+            subject=subject,
+            message_body=message_body,
+            cc=cc,
+            bcc=bcc,
+            attachments=attachments,
+            use_tls=tls
+        )
 
         if server_quit:
             self.server.quit()
+
+    def send_mail_with_template(
+            self,
+            recipient_email: str,
+            subject: str,
+            template_path: str,
+            template_vars: dict,
+            cc: Optional[List[str]] = None,
+            attachments: Optional[List[str]] = None,
+            tls: bool = True,
+            server_quit: bool = False
+    ) -> None:
+        logger.warning("send_mail_with_template is deprecated, use send_template instead")
+
+        self.send_template(
+            recipient=recipient_email,
+            subject=subject,
+            template_name=template_path,
+            context=template_vars,
+            cc=cc,
+            attachments=attachments,
+            use_tls=tls
+        )
+
+        if server_quit:
+            self.server.quit()
+
+
+# Example usage
+if __name__ == "__main__":
+    sender = EmailSender(
+        user_email="your@email.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="password",
+        port=587
+    )
+
+    # Sync send
+    sender.send(
+        recipients=["gh.rambod@gmail.com"],
+        subject="Modern Email",
+        message_body="<h1>HTML Content</h1>",
+        html=True,
+        attachments=["important.pdf"]
+    )
