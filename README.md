@@ -195,7 +195,7 @@ MailToolsBox is an open-source project. Contributions are welcome! To contribute
 3. Implement changes and write tests.
 4. Submit a pull request for review.
 
-For discussions, visit **[rambod.net](https://www.rambod.net)**.
+For discussions, visit **[rambod.net](https://www.rambod.net)**. **[mailtoolsbox](https://rambod.net/portfolio/mailtoolsbox/)**
 
 ---
 
