@@ -226,3 +226,5 @@ class SendAgent(EmailSender):
             cc=cc,
             attachments=attachments,
             use_tls=tls
+        )
+

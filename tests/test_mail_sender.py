@@ -1,0 +1,69 @@
+import builtins
+import smtplib
+from unittest import mock
+import types
+import sys
+import pytest
+
+# Provide dummy aiosmtplib to satisfy imports
+sys.modules.setdefault(
+    "aiosmtplib",
+    types.SimpleNamespace(SMTP=None, errors=types.SimpleNamespace(SMTPException=Exception)),
+)
+# Minimal stub for jinja2
+sys.modules.setdefault(
+    "jinja2",
+    types.SimpleNamespace(
+        Environment=lambda **kwargs: types.SimpleNamespace(get_template=lambda name: types.SimpleNamespace(render=lambda **kw: "")),
+        FileSystemLoader=lambda *args, **kwargs: None,
+        select_autoescape=lambda x: None,
+    ),
+)
+sys.modules.setdefault(
+    "email_validator",
+    types.SimpleNamespace(
+        validate_email=lambda email, check_deliverability=False: types.SimpleNamespace(normalized=email),
+        EmailNotValidError=Exception,
+    ),
+)
+
+from MailToolsBox.mailSender import EmailSender
+
+
+def test_email_sender_send(monkeypatch):
+    smtp_instance = mock.MagicMock()
+    smtp_instance.__enter__.return_value = smtp_instance
+    smtp_instance.__exit__.return_value = None
+
+    smtp_class = mock.MagicMock(return_value=smtp_instance)
+    monkeypatch.setattr(smtplib, "SMTP", smtp_class)
+
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+        port=25,
+    )
+
+    sender.send(
+        recipients=["to@example.com"],
+        subject="Subj",
+        message_body="Body",
+        cc=["cc@example.com"],
+        bcc=["bcc@example.com"],
+        use_tls=True,
+    )
+
+    smtp_class.assert_called_with("smtp.example.com", 25, timeout=10)
+    smtp_instance.starttls.assert_called()
+    smtp_instance.login.assert_called_with("user@example.com", "pass")
+    smtp_instance.send_message.assert_called()
+
+    args, kwargs = smtp_instance.send_message.call_args
+    msg = args[0]
+    to_addrs = kwargs["to_addrs"]
+    assert set(to_addrs) == {"to@example.com", "cc@example.com", "bcc@example.com"}
+    assert msg["To"] == "to@example.com"
+    assert msg["Cc"] == "cc@example.com"
+
+
