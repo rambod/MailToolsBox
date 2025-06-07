@@ -17,6 +17,15 @@ class ImapAgent:
         self.mail.login(self.email_account, self.password)
 
     def download_mail_text(self, path='', mailbox='INBOX'):
+        """Download all emails in ``mailbox`` and write them as plain text.
+
+        This method now ensures that a connection to the IMAP server has been
+        established before attempting to access any mailbox.  If no connection
+        exists, :py:meth:`login_account` is invoked to create one.
+        """
+        if self.mail is None:
+            self.login_account()
+
         with open(f'{path}email.txt', 'w') as f:
             self.mail.select(mailbox)
             _, data = self.mail.uid('search', None, 'ALL')
