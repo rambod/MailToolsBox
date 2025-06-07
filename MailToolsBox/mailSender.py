@@ -3,7 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from email.utils import COMMASPACE, formatdate
-from jinja2 import Template, Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typing import List, Optional, Iterable
 from pathlib import Path
 import logging
@@ -190,23 +190,3 @@ class SendAgent(EmailSender):
             attachments=attachments,
             use_tls=tls
         )
-
-
-
-# Example usage
-if __name__ == "__main__":
-    sender = EmailSender(
-        user_email="your@email.com",
-        server_smtp_address="smtp.example.com",
-        user_email_password="password",
-        port=587
-    )
-
-    # Sync send
-    sender.send(
-        recipients=["gh.rambod@gmail.com"],
-        subject="Modern Email",
-        message_body="<h1>HTML Content</h1>",
-        html=True,
-        attachments=["important.pdf"]
-    )
