@@ -49,14 +49,13 @@ class ImapAgent:
                             f"From: {email_from}\nTo: {email_to}\nDate: {local_message_date}\nSubject: {subject}\n\nBody:\n\n{body.decode('utf-8')}\n\n")
         self.mail.close()
 
-    import json
 
     def download_mail_json(self, lookup: str = 'ALL', save: bool = False, path: str = '', file_name: str = 'mail.json') -> str:
         save_json = save
         self.login_account()
 
-        with imaplib.IMAP4_SSL(self.imap_server) as mail:
-            mail.login(self.username, self.password)
+        with imaplib.IMAP4_SSL(self.server_address) as mail:
+            mail.login(self.email_account, self.password)
             mail.select("inbox")
             result, data = mail.uid('search', None, lookup)  # (ALL/UNSEEN)
             uids = data[0].split()
