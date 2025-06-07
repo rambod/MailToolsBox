@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='MailToolsBox',
     packages=find_packages(),
-    version='1.0.0',  # Increased version for major revamp
+    version='1.0.1',  # Increased version for major revamp
     license='MIT',
     description='A modern and efficient Python library for sending emails with SMTP, Jinja2 templates, and attachments.',
     long_description=open('README.md', encoding='utf-8').read(),
