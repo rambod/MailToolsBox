@@ -10,9 +10,9 @@ import logging
 from ssl import create_default_context
 from email_validator import validate_email, EmailNotValidError
 
-# Set up logging
+# Set up logging without configuring the root logger
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logger.addHandler(logging.NullHandler())
 
 
 class EmailSender:
