@@ -15,7 +15,8 @@ setup(
     keywords=['Mail', 'SMTP', 'email', 'tools', 'attachments', 'Jinja2', 'Python', 'email-validation'],
     install_requires=[
         "Jinja2>=3.0.2",
-        "email-validator>=2.0.0"
+        "email-validator>=2.0.0",
+        "aiosmtplib>=2.0.0"
     ],
     classifiers=[
         'Development Status :: 5 - Production/Stable',

@@ -1,4 +1,5 @@
 import smtplib
+import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -129,6 +130,37 @@ class EmailSender:
             logger.error(f"Unexpected error: {str(e)}")
             raise
 
+    async def send_async(
+            self,
+            recipients: Iterable[str],
+            subject: str,
+            message_body: str,
+            cc: Optional[Iterable[str]] = None,
+            bcc: Optional[Iterable[str]] = None,
+            attachments: Optional[Iterable[str]] = None,
+            use_tls: bool = True,
+            html: bool = False
+    ) -> None:
+        """Asynchronous email sending using aiosmtplib."""
+        msg = self._create_base_message(subject, recipients, cc, bcc)
+        msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
+
+        if attachments:
+            self._add_attachments(msg, attachments)
+
+        try:
+            async with aiosmtplib.SMTP(hostname=self.server_smtp_address, port=self.port, timeout=self.timeout) as server:
+                if use_tls:
+                    await server.starttls(context=self.ssl_context)
+                await server.login(self.user_email, self.user_email_password)
+                await server.send_message(msg)
+        except aiosmtplib.errors.SMTPException as e:
+            logger.error(f"SMTP error occurred: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            raise
+
     def send_template(
             self,
             recipient: str,
@@ -215,3 +247,17 @@ if __name__ == "__main__":
         html=True,
         attachments=["important.pdf"]
     )
+
+    # Async send
+    import asyncio
+
+    async def run():
+        await sender.send_async(
+            recipients=["gh.rambod@gmail.com"],
+            subject="Modern Email Async",
+            message_body="<h1>HTML Content Async</h1>",
+            html=True,
+            attachments=["important.pdf"]
+        )
+
+    asyncio.run(run())

@@ -10,6 +10,7 @@ MailToolsBox is a modern, feature-rich Python package designed for sending and m
 - **Attachment handling**
 - **Template-based email rendering using Jinja2**
 - **Secure email transactions with TLS/SSL**
+- **Asynchronous email sending via `send_async`**
 - **Email address validation**
 - **Logging for debugging and monitoring**
 - **Backward compatibility with `SendAgent`**
@@ -118,7 +119,26 @@ sender.send(
 
 ---
 
-### 5. **Backward Compatibility with `SendAgent`**
+### 5. **Asynchronous Email Sending**
+
+Send emails without blocking using `send_async` and `asyncio`:
+
+```python
+import asyncio
+
+async def main():
+    await sender.send_async(
+        recipients=["recipient@example.com"],
+        subject="Async Example",
+        message_body="This email was sent asynchronously!"
+    )
+
+asyncio.run(main())
+```
+
+---
+
+### 6. **Backward Compatibility with `SendAgent`**
 
 For those migrating from earlier versions, `SendAgent` ensures seamless compatibility:
 
