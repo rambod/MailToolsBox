@@ -121,3 +121,26 @@ def test_download_mail_msg(tmp_path):
     assert file_path.exists()
 
 
+def test_from_env(monkeypatch):
+    monkeypatch.setenv("IMAP_EMAIL", "env@example.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "secret")
+    monkeypatch.setenv("IMAP_SERVER", "imap.env.com")
+
+    agent = ImapAgent.from_env()
+
+    assert agent.email_account == "env@example.com"
+    assert agent.password == "secret"
+    assert agent.server_address == "imap.env.com"
+
+
+def test_context_manager(monkeypatch):
+    dummy = DummyMail(sample_message_bytes())
+    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda addr: dummy)
+
+    with ImapAgent('user', 'pass', 'imap.example.com') as agent:
+        assert agent.mail is dummy
+        assert dummy.logged_in
+    assert dummy.closed
+    assert agent.mail is None
+
+

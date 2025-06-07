@@ -2,6 +2,7 @@ import imaplib
 import email
 import json
 import datetime
+import os
 from typing import List
 
 
@@ -12,9 +13,35 @@ class ImapAgent:
         self.server_address = server_address
         self.mail = None
 
+    @classmethod
+    def from_env(cls) -> "ImapAgent":
+        """Create :class:`ImapAgent` from environment variables.
+
+        Required variables are ``IMAP_EMAIL``, ``IMAP_PASSWORD`` and
+        ``IMAP_SERVER``.
+        """
+        email_account = os.environ["IMAP_EMAIL"]
+        password = os.environ["IMAP_PASSWORD"]
+        server = os.environ["IMAP_SERVER"]
+        return cls(email_account, password, server)
+
+    def __enter__(self) -> "ImapAgent":
+        self.login_account()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.logout_account()
+
     def login_account(self):
         self.mail = imaplib.IMAP4_SSL(self.server_address)
         self.mail.login(self.email_account, self.password)
+
+    def logout_account(self):
+        if self.mail is not None:
+            try:
+                self.mail.logout()
+            finally:
+                self.mail = None
 
     def download_mail_text(self, path='', mailbox='INBOX'):
         """Download all emails in ``mailbox`` and write them as plain text.
@@ -57,11 +84,11 @@ class ImapAgent:
                         f.write(
                             f"From: {email_from}\nTo: {email_to}\nDate: {local_message_date}\nSubject: {subject}\n\nBody:\n\n{body.decode('utf-8')}\n\n")
         self.mail.close()
+        self.logout_account()
 
 
     def download_mail_json(self, lookup: str = 'ALL', save: bool = False, path: str = '', file_name: str = 'mail.json') -> str:
         save_json = save
-        self.login_account()
 
         with imaplib.IMAP4_SSL(self.server_address) as mail:
             mail.login(self.email_account, self.password)
@@ -125,3 +152,5 @@ class ImapAgent:
             file_name = f"{path}email_{i}.msg"
             with open(file_name, 'w') as f:
                 f.write(email_message.as_string())
+        self.mail.close()
+        self.logout_account()
