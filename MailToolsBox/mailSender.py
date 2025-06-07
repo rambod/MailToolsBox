@@ -1,3 +1,4 @@
+import os
 import smtplib
 import aiosmtplib
 from email.mime.text import MIMEText
@@ -26,7 +27,7 @@ class EmailSender:
             user_email_password: str,
             port: int = 587,
             timeout: int = 10,
-            validate_emails: bool = True
+            validate_emails: bool = True,
     ) -> None:
         self.user_email = self._validate_email(user_email) if validate_emails else user_email
         self.user_email_password = user_email_password
@@ -40,6 +41,25 @@ class EmailSender:
             autoescape=select_autoescape(['html', 'xml'])
         )
         self.ssl_context = create_default_context()
+        logger.info("EmailSender initialised for %s", self.user_email)
+
+    @classmethod
+    def from_env(cls) -> "EmailSender":
+        """Create :class:`EmailSender` from environment variables.
+
+        Required variables are ``EMAIL``, ``SMTP_SERVER`` and ``EMAIL_PASSWORD``.
+        ``SMTP_PORT`` is optional and defaults to ``587``.
+        """
+        user_email = os.environ["EMAIL"]
+        server = os.environ["SMTP_SERVER"]
+        password = os.environ["EMAIL_PASSWORD"]
+        port = int(os.getenv("SMTP_PORT", 587))
+        return cls(
+            user_email=user_email,
+            server_smtp_address=server,
+            user_email_password=password,
+            port=port,
+        )
 
     def _validate_email(self, email_address: str) -> str:
         """Validate and normalize email address using email-validator."""
@@ -102,6 +122,7 @@ class EmailSender:
             html: bool = False
     ) -> None:
         """Synchronous email sending with improved error handling."""
+        logger.info("Sending email to %s", ", ".join(recipients))
         # Build the MIME message without exposing BCC recipients
         msg = self._create_base_message(subject, recipients, cc)
         validated_bcc = None
@@ -130,6 +151,18 @@ class EmailSender:
             logger.error(f"Unexpected error: {str(e)}")
             raise
 
+    def send_bulk(
+            self,
+            recipients: Iterable[str],
+            subject: str,
+            message_body: str,
+            **kwargs,
+    ) -> None:
+        """Send the same message to many recipients individually."""
+        for recipient in recipients:
+            logger.info("Sending bulk email to %s", recipient)
+            self.send([recipient], subject, message_body, **kwargs)
+
     async def send_async(
             self,
             recipients: Iterable[str],
@@ -142,7 +175,10 @@ class EmailSender:
             html: bool = False
     ) -> None:
         """Asynchronous email sending using aiosmtplib."""
-        msg = self._create_base_message(subject, recipients, cc, bcc)
+        msg = self._create_base_message(subject, recipients, cc)
+        validated_bcc = None
+        if bcc:
+            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else list(bcc)
         msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
 
         if attachments:
@@ -153,7 +189,12 @@ class EmailSender:
                 if use_tls:
                     await server.starttls(context=self.ssl_context)
                 await server.login(self.user_email, self.user_email_password)
-                await server.send_message(msg)
+                all_recipients = list(recipients)
+                if cc:
+                    all_recipients.extend(cc)
+                if validated_bcc:
+                    all_recipients.extend(validated_bcc)
+                await server.send_message(msg, to_addrs=all_recipients)
         except aiosmtplib.errors.SMTPException as e:
             logger.error(f"SMTP error occurred: {str(e)}")
             raise
@@ -172,6 +213,7 @@ class EmailSender:
             use_tls: bool = True
     ) -> None:
         """Send email using Jinja2 template with autoescaping."""
+        logger.info("Sending templated email to %s using %s", recipient, template_name)
         template = self.template_env.get_template(template_name)
         html_content = template.render(**context)
         self.send([recipient], subject, html_content, cc=cc, attachments=attachments, use_tls=use_tls, html=True)

@@ -67,3 +67,34 @@ def test_email_sender_send(monkeypatch):
     assert msg["Cc"] == "cc@example.com"
 
 
+def test_email_sender_from_env(monkeypatch):
+    monkeypatch.setenv("EMAIL", "env@example.com")
+    monkeypatch.setenv("SMTP_SERVER", "smtp.env.com")
+    monkeypatch.setenv("EMAIL_PASSWORD", "secret")
+    monkeypatch.setenv("SMTP_PORT", "2525")
+
+    sender = EmailSender.from_env()
+
+    assert sender.user_email == "env@example.com"
+    assert sender.server_smtp_address == "smtp.env.com"
+    assert sender.user_email_password == "secret"
+    assert sender.port == 2525
+
+
+def test_send_bulk(monkeypatch):
+    sent = []
+
+    class DummySender(EmailSender):
+        def __init__(self):
+            pass
+
+        def send(self, recipients, subject, message_body, **kwargs):
+            sent.append(recipients[0])
+
+    sender = DummySender()
+
+    sender.send_bulk(["a@example.com", "b@example.com"], "subj", "body")
+
+    assert sent == ["a@example.com", "b@example.com"]
+
+
