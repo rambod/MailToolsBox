@@ -11,7 +11,7 @@ setup(
     author='Rambod Ghashghai',
     author_email='gh.rambod@gmail.com',
     url='https://github.com/rambod/MailToolsBox',
-    download_url='https://github.com/rambod/MailToolsBox/archive/refs/tags/v1.0.0.tar.gz',
+    download_url='https://github.com/rambod/MailToolsBox/archive/refs/tags/v1.0.1.tar.gz',
     keywords=['Mail', 'SMTP', 'email', 'tools', 'attachments', 'Jinja2', 'Python', 'email-validation'],
     install_requires=[
         "Jinja2>=3.0.2",
