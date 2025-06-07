@@ -52,8 +52,7 @@ class EmailSender:
             self,
             subject: str,
             recipients: Iterable[str],
-            cc: Optional[Iterable[str]] = None,
-            bcc: Optional[Iterable[str]] = None
+            cc: Optional[Iterable[str]] = None
     ) -> MIMEMultipart:
         """Create MIME message with proper headers."""
         msg = MIMEMultipart()
@@ -69,10 +68,6 @@ class EmailSender:
         if cc:
             validated_cc = [self._validate_email(c) for c in cc] if self.validate_emails else cc
             msg['Cc'] = COMMASPACE.join(validated_cc)
-
-        if bcc:
-            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else bcc
-            msg['Bcc'] = COMMASPACE.join(validated_bcc)
 
         return msg
 
@@ -105,7 +100,11 @@ class EmailSender:
             html: bool = False
     ) -> None:
         """Synchronous email sending with improved error handling."""
-        msg = self._create_base_message(subject, recipients, cc, bcc)
+        # Build the MIME message without exposing BCC recipients
+        msg = self._create_base_message(subject, recipients, cc)
+        validated_bcc = None
+        if bcc:
+            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else list(bcc)
         msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
 
         if attachments:
@@ -116,7 +115,12 @@ class EmailSender:
                 if use_tls:
                     server.starttls(context=self.ssl_context)
                 server.login(self.user_email, self.user_email_password)
-                server.send_message(msg)
+                all_recipients = list(recipients)
+                if cc:
+                    all_recipients.extend(cc)
+                if validated_bcc:
+                    all_recipients.extend(validated_bcc)
+                server.send_message(msg, to_addrs=all_recipients)
         except smtplib.SMTPException as e:
             logger.error(f"SMTP error occurred: {str(e)}")
             raise
