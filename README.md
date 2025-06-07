@@ -13,6 +13,8 @@ MailToolsBox is a modern, feature-rich Python package designed for sending and m
 - **Asynchronous email sending via `send_async`**
 - **Email address validation**
 - **Logging for debugging and monitoring**
+- **Bulk email sending with `send_bulk`**
+- **Convenient configuration via environment variables using `from_env`**
 - **Backward compatibility with `SendAgent`**
 
 ---
@@ -138,7 +140,21 @@ asyncio.run(main())
 
 ---
 
-### 6. **Backward Compatibility with `SendAgent`**
+### 6. **Bulk Email Sending**
+
+Send the same message to many recipients individually, ensuring privacy:
+
+```python
+sender.send_bulk(
+    recipients=["user1@example.com", "user2@example.com"],
+    subject="Announcement",
+    message_body="This email is sent separately to each recipient!",
+)
+```
+
+---
+
+### 7. **Backward Compatibility with `SendAgent`**
 
 For those migrating from earlier versions, `SendAgent` ensures seamless compatibility:
 
@@ -170,14 +186,7 @@ legacy_sender.send_mail(
 Example using environment variables:
 
 ```python
-import os
-
-sender = EmailSender(
-    user_email=os.getenv("EMAIL"),
-    server_smtp_address=os.getenv("SMTP_SERVER"),
-    user_email_password=os.getenv("EMAIL_PASSWORD"),
-    port=int(os.getenv("SMTP_PORT", 587))
-)
+sender = EmailSender.from_env()
 ```
 
 ---
