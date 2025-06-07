@@ -33,8 +33,9 @@ class EmailSender:
         self.port = port
         self.timeout = timeout
         self.validate_emails = validate_emails
+        template_dir = Path(__file__).resolve().parent / "templates"
         self.template_env = Environment(
-            loader=FileSystemLoader('templates'),
+            loader=FileSystemLoader(str(template_dir)),
             autoescape=select_autoescape(['html', 'xml'])
         )
         self.ssl_context = create_default_context()
