@@ -153,8 +153,7 @@ class SendAgent(EmailSender):
             cc: Optional[List[str]] = None,
             bcc: Optional[List[str]] = None,
             attachments: Optional[List[str]] = None,
-            tls: bool = True,
-            server_quit: bool = False
+            tls: bool = True
     ) -> None:
         logger.warning("SendAgent is deprecated, use EmailSender instead")
 
@@ -169,8 +168,6 @@ class SendAgent(EmailSender):
             use_tls=tls
         )
 
-        if server_quit:
-            self.server.quit()
 
     def send_mail_with_template(
             self,
@@ -180,8 +177,7 @@ class SendAgent(EmailSender):
             template_vars: dict,
             cc: Optional[List[str]] = None,
             attachments: Optional[List[str]] = None,
-            tls: bool = True,
-            server_quit: bool = False
+            tls: bool = True
     ) -> None:
         logger.warning("send_mail_with_template is deprecated, use send_template instead")
 
@@ -195,8 +191,6 @@ class SendAgent(EmailSender):
             use_tls=tls
         )
 
-        if server_quit:
-            self.server.quit()
 
 
 # Example usage
