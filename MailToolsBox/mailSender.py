@@ -1,4 +1,5 @@
 import smtplib
+import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -10,9 +11,9 @@ import logging
 from ssl import create_default_context
 from email_validator import validate_email, EmailNotValidError
 
-# Set up logging
+# Set up logging without configuring the root logger
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logger.addHandler(logging.NullHandler())
 
 
 class EmailSender:
@@ -33,8 +34,9 @@ class EmailSender:
         self.port = port
         self.timeout = timeout
         self.validate_emails = validate_emails
+        template_dir = Path(__file__).resolve().parent / "templates"
         self.template_env = Environment(
-            loader=FileSystemLoader('templates'),
+            loader=FileSystemLoader(str(template_dir)),
             autoescape=select_autoescape(['html', 'xml'])
         )
         self.ssl_context = create_default_context()
@@ -52,8 +54,7 @@ class EmailSender:
             self,
             subject: str,
             recipients: Iterable[str],
-            cc: Optional[Iterable[str]] = None,
-            bcc: Optional[Iterable[str]] = None
+            cc: Optional[Iterable[str]] = None
     ) -> MIMEMultipart:
         """Create MIME message with proper headers."""
         msg = MIMEMultipart()
@@ -69,10 +70,6 @@ class EmailSender:
         if cc:
             validated_cc = [self._validate_email(c) for c in cc] if self.validate_emails else cc
             msg['Cc'] = COMMASPACE.join(validated_cc)
-
-        if bcc:
-            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else bcc
-            msg['Bcc'] = COMMASPACE.join(validated_bcc)
 
         return msg
 
@@ -105,7 +102,11 @@ class EmailSender:
             html: bool = False
     ) -> None:
         """Synchronous email sending with improved error handling."""
-        msg = self._create_base_message(subject, recipients, cc, bcc)
+        # Build the MIME message without exposing BCC recipients
+        msg = self._create_base_message(subject, recipients, cc)
+        validated_bcc = None
+        if bcc:
+            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else list(bcc)
         msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
 
         if attachments:
@@ -116,8 +117,44 @@ class EmailSender:
                 if use_tls:
                     server.starttls(context=self.ssl_context)
                 server.login(self.user_email, self.user_email_password)
-                server.send_message(msg)
+                all_recipients = list(recipients)
+                if cc:
+                    all_recipients.extend(cc)
+                if validated_bcc:
+                    all_recipients.extend(validated_bcc)
+                server.send_message(msg, to_addrs=all_recipients)
         except smtplib.SMTPException as e:
+            logger.error(f"SMTP error occurred: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            raise
+
+    async def send_async(
+            self,
+            recipients: Iterable[str],
+            subject: str,
+            message_body: str,
+            cc: Optional[Iterable[str]] = None,
+            bcc: Optional[Iterable[str]] = None,
+            attachments: Optional[Iterable[str]] = None,
+            use_tls: bool = True,
+            html: bool = False
+    ) -> None:
+        """Asynchronous email sending using aiosmtplib."""
+        msg = self._create_base_message(subject, recipients, cc, bcc)
+        msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
+
+        if attachments:
+            self._add_attachments(msg, attachments)
+
+        try:
+            async with aiosmtplib.SMTP(hostname=self.server_smtp_address, port=self.port, timeout=self.timeout) as server:
+                if use_tls:
+                    await server.starttls(context=self.ssl_context)
+                await server.login(self.user_email, self.user_email_password)
+                await server.send_message(msg)
+        except aiosmtplib.errors.SMTPException as e:
             logger.error(f"SMTP error occurred: {str(e)}")
             raise
         except Exception as e:
@@ -189,4 +226,3 @@ class SendAgent(EmailSender):
             cc=cc,
             attachments=attachments,
             use_tls=tls
-        )
