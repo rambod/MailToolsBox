@@ -171,9 +171,28 @@ legacy_sender = SendAgent(
 legacy_sender.send_mail(
     recipient_email=["recipient@example.com"],
     subject="Legacy Compatibility Test",
-    message_body="Testing backward compatibility."
+        message_body="Testing backward compatibility."
 )
 ```
+
+---
+
+### 8. **Retrieving Emails via IMAP**
+
+`ImapAgent` can be used to fetch messages from an IMAP mailbox. It supports
+loading configuration from environment variables with `from_env` and can be
+used as a context manager to ensure connections are closed properly.
+
+```python
+from MailToolsBox import ImapAgent
+
+# Using environment variables IMAP_EMAIL, IMAP_PASSWORD and IMAP_SERVER
+agent = ImapAgent.from_env()
+
+with agent as imap:
+    imap.download_mail_text(path="/tmp/")
+```
+
 
 ---
 
