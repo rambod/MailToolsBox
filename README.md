@@ -74,6 +74,16 @@ sender.send(
 ### 3. **Using Email Templates (Jinja2)**
 
 MailToolsBox allows sending emails using Jinja2 templates stored in the `templates/` directory.
+Ensure this directory exists alongside your code or provide its path via the `template_dir` argument when instantiating `EmailSender`.
+
+```python
+sender = EmailSender(
+    user_email="you@example.com",
+    server_smtp_address="smtp.example.com",
+    user_email_password="secret",
+    template_dir="/path/to/templates",
+)
+```
 
 #### **Example Template (`templates/welcome.html`)**:
 

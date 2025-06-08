@@ -29,6 +29,7 @@ class EmailSender:
             port: int = 587,
             timeout: int = 10,
             validate_emails: bool = True,
+            template_dir: Optional[str] = None,
     ) -> None:
         self.user_email = self._validate_email(user_email) if validate_emails else user_email
         self.user_email_password = user_email_password
@@ -36,9 +37,12 @@ class EmailSender:
         self.port = port
         self.timeout = timeout
         self.validate_emails = validate_emails
-        template_dir = Path(__file__).resolve().parent / "templates"
+        if template_dir is None:
+            template_path = Path(__file__).resolve().parent / "templates"
+        else:
+            template_path = Path(template_dir)
         self.template_env = Environment(
-            loader=FileSystemLoader(str(template_dir)),
+            loader=FileSystemLoader(str(template_path)),
             autoescape=select_autoescape(['html', 'xml'])
         )
         self.ssl_context = create_default_context()
