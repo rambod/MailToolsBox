@@ -1,6 +1,7 @@
 import os
 import smtplib
 import aiosmtplib
+import aiofiles
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -109,6 +110,21 @@ class EmailSender:
             part['Content-Disposition'] = f'attachment; filename="{path.name}"'
             msg.attach(part)
 
+    async def _add_attachments_async(self, msg: MIMEMultipart, attachments: Iterable[str]) -> None:
+        """Async variant of :meth:`_add_attachments` using aiofiles."""
+        for file_path in attachments:
+            path = Path(file_path)
+            if not path.exists():
+                logger.warning(f"Attachment not found: {file_path}")
+                continue
+
+            async with aiofiles.open(path, 'rb') as f:
+                data = await f.read()
+
+            part = MIMEApplication(data, Name=path.name)
+            part['Content-Disposition'] = f'attachment; filename="{path.name}"'
+            msg.attach(part)
+
 
     def send(
             self,
@@ -194,7 +210,7 @@ class EmailSender:
         msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
 
         if attachments:
-            self._add_attachments(msg, attachments)
+            await self._add_attachments_async(msg, attachments)
 
         try:
             async with aiosmtplib.SMTP(hostname=self.server_smtp_address, port=self.port, timeout=self.timeout) as server:
