@@ -53,7 +53,8 @@ class ImapAgent:
         if self.mail is None:
             self.login_account()
 
-        with open(f'{path}email.txt', 'w') as f:
+        file_path = os.path.join(path, 'email.txt')
+        with open(file_path, 'w') as f:
             self.mail.select(mailbox)
             _, data = self.mail.uid('search', None, 'ALL')
             uids = data[0].split()
@@ -136,7 +137,8 @@ class ImapAgent:
         mail_items_json = json.dumps(mail_items)
 
         if save_json:
-            with open(f"{path}{file_name}", 'w') as f:
+            file_path = os.path.join(path, file_name)
+            with open(file_path, 'w') as f:
                 f.write(mail_items_json)
 
         return mail_items_json
@@ -149,7 +151,7 @@ class ImapAgent:
                 'fetch', latest_email_uid, '(RFC822)')
             raw_email = email_data[0][1]
             email_message = email.message_from_bytes(raw_email)
-            file_name = f"{path}email_{i}.msg"
+            file_name = os.path.join(path, f"email_{i}.msg")
             with open(file_name, 'w') as f:
                 f.write(email_message.as_string())
         self.mail.close()
