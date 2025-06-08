@@ -157,11 +157,23 @@ class EmailSender:
             subject: str,
             message_body: str,
             **kwargs,
-    ) -> None:
-        """Send the same message to many recipients individually."""
+    ) -> dict:
+        """Send the same message to many recipients individually.
+
+        Returns a summary dictionary with ``sent`` and ``failed`` keys
+        containing lists of successful recipients and mapping of failed
+        recipients to exceptions.
+        """
+        results = {"sent": [], "failed": {}}
         for recipient in recipients:
             logger.info("Sending bulk email to %s", recipient)
-            self.send([recipient], subject, message_body, **kwargs)
+            try:
+                self.send([recipient], subject, message_body, **kwargs)
+                results["sent"].append(recipient)
+            except Exception as exc:  # pragma: no cover - logging side effect
+                logger.exception("Failed sending email to %s", recipient)
+                results["failed"][recipient] = exc
+        return results
 
     async def send_async(
             self,
