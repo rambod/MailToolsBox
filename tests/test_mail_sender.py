@@ -3,12 +3,19 @@ import smtplib
 from unittest import mock
 import types
 import sys
+from pathlib import Path
+from email.mime.multipart import MIMEMultipart
 import pytest
 
 # Provide dummy aiosmtplib to satisfy imports
 sys.modules.setdefault(
     "aiosmtplib",
     types.SimpleNamespace(SMTP=None, errors=types.SimpleNamespace(SMTPException=Exception)),
+)
+# Minimal stub for aiofiles
+sys.modules.setdefault(
+    "aiofiles",
+    types.SimpleNamespace(open=lambda *args, **kwargs: None),
 )
 # Minimal stub for jinja2
 sys.modules.setdefault(
@@ -152,5 +159,100 @@ def test_send_template_passes_bcc(monkeypatch):
     assert captured["recipients"] == ["to@example.com"]
     assert captured["bcc"] == ["bcc@example.com"]
     assert captured["cc"] == ["cc@example.com"]
+
+
+class DummyAsyncSMTP:
+    def __init__(self):
+        self.started_tls = False
+        self.logged_in = None
+        self.sent_message = None
+        self.to_addrs = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    async def starttls(self, context=None):
+        self.started_tls = True
+
+    async def login(self, user, password):
+        self.logged_in = (user, password)
+
+    async def send_message(self, msg, to_addrs):
+        self.sent_message = msg
+        self.to_addrs = to_addrs
+
+
+def test_send_async_uses_async_attachment(monkeypatch):
+    smtp_instance = DummyAsyncSMTP()
+    monkeypatch.setattr(sys.modules["aiosmtplib"], "SMTP", lambda **kw: smtp_instance)
+
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+        port=25,
+    )
+
+    called = {}
+
+    async def fake_add(msg, attachments):
+        called["attachments"] = attachments
+
+    monkeypatch.setattr(sender, "_add_attachments_async", fake_add)
+
+    import asyncio
+
+    async def run():
+        await sender.send_async(
+            recipients=["to@example.com"],
+            subject="Subj",
+            message_body="Body",
+            cc=["cc@example.com"],
+            bcc=["bcc@example.com"],
+            attachments=["file1"],
+            use_tls=True,
+        )
+
+    asyncio.run(run())
+
+    assert called["attachments"] == ["file1"]
+    assert smtp_instance.started_tls
+    assert smtp_instance.logged_in == ("user@example.com", "pass")
+    assert set(smtp_instance.to_addrs) == {"to@example.com", "cc@example.com", "bcc@example.com"}
+
+
+def test_add_attachments_async(monkeypatch):
+    from MailToolsBox import mailSender as ms
+    msg = MIMEMultipart()
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+    )
+
+    monkeypatch.setattr(Path, "exists", lambda self: True, raising=False)
+
+    class DummyFile:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def read(self):
+            return b"data"
+
+    monkeypatch.setattr(ms.aiofiles, "open", lambda *a, **k: DummyFile())
+
+    import asyncio
+
+    asyncio.run(sender._add_attachments_async(msg, ["/tmp/file.txt"]))
+
+    part = msg.get_payload()[0]
+    assert part.get_filename() == "file.txt"
+    assert part.get_payload(decode=True) == b"data"
 
 

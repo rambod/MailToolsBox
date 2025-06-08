@@ -13,6 +13,11 @@ sys.modules.setdefault(
     "aiosmtplib",
     types.SimpleNamespace(SMTP=None, errors=types.SimpleNamespace(SMTPException=Exception)),
 )
+# Minimal stub for aiofiles used by mailSender imports
+sys.modules.setdefault(
+    "aiofiles",
+    types.SimpleNamespace(open=lambda *args, **kwargs: None),
+)
 # Minimal stub for jinja2 used by EmailSender imports
 sys.modules.setdefault(
     "jinja2",
