@@ -101,7 +101,8 @@ sender.send_template(
     recipient="recipient@example.com",
     subject="Welcome to Our Service",
     template_name="welcome.html",
-    context=context
+    context=context,
+    bcc=["bcc@example.com"]
 )
 ```
 

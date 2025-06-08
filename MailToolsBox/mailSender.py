@@ -209,6 +209,7 @@ class EmailSender:
             template_name: str,
             context: dict,
             cc: Optional[Iterable[str]] = None,
+            bcc: Optional[Iterable[str]] = None,
             attachments: Optional[Iterable[str]] = None,
             use_tls: bool = True
     ) -> None:
@@ -216,7 +217,16 @@ class EmailSender:
         logger.info("Sending templated email to %s using %s", recipient, template_name)
         template = self.template_env.get_template(template_name)
         html_content = template.render(**context)
-        self.send([recipient], subject, html_content, cc=cc, attachments=attachments, use_tls=use_tls, html=True)
+        self.send(
+            [recipient],
+            subject,
+            html_content,
+            cc=cc,
+            bcc=bcc,
+            attachments=attachments,
+            use_tls=use_tls,
+            html=True,
+        )
 
 
 
