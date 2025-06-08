@@ -98,3 +98,33 @@ def test_send_bulk(monkeypatch):
     assert sent == ["a@example.com", "b@example.com"]
 
 
+def test_send_template_passes_bcc(monkeypatch):
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+        port=25,
+    )
+
+    captured = {}
+
+    def fake_send(recipients, subject, message_body, **kwargs):
+        captured["recipients"] = recipients
+        captured.update(kwargs)
+
+    monkeypatch.setattr(sender, "send", fake_send)
+
+    sender.send_template(
+        recipient="to@example.com",
+        subject="Subj",
+        template_name="tmpl.html",
+        context={},
+        cc=["cc@example.com"],
+        bcc=["bcc@example.com"],
+    )
+
+    assert captured["recipients"] == ["to@example.com"]
+    assert captured["bcc"] == ["bcc@example.com"]
+    assert captured["cc"] == ["cc@example.com"]
+
+
