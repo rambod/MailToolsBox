@@ -152,7 +152,7 @@ class ImapAgent:
             raw_email = email_data[0][1]
             email_message = email.message_from_bytes(raw_email)
             file_name = os.path.join(path, f"email_{i}.msg")
-            with open(file_name, 'w') as f:
-                f.write(email_message.as_string())
+            with open(file_name, 'wb') as f:
+                f.write(email_message.as_bytes())
         self.mail.close()
         self.logout_account()
