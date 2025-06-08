@@ -77,13 +77,15 @@ def test_login_account(monkeypatch):
     assert dummy.logged_in
 
 
-def test_download_mail_text(tmp_path, monkeypatch):
+@pytest.mark.parametrize("trailing", [True, False])
+def test_download_mail_text(tmp_path, monkeypatch, trailing):
     message_bytes = sample_message_bytes()
     dummy = DummyMail(message_bytes)
     agent = ImapAgent('user', 'pass', 'imap.example.com')
     agent.mail = dummy
 
-    agent.download_mail_text(path=str(tmp_path) + os.sep)
+    path = str(tmp_path) + (os.sep if trailing else "")
+    agent.download_mail_text(path=path)
 
     file_path = tmp_path / 'email.txt'
     assert file_path.exists()
@@ -92,14 +94,16 @@ def test_download_mail_text(tmp_path, monkeypatch):
     assert dummy.closed
 
 
-def test_download_mail_json(tmp_path, monkeypatch):
+@pytest.mark.parametrize("trailing", [True, False])
+def test_download_mail_json(tmp_path, monkeypatch, trailing):
     message_bytes = sample_message_bytes()
     dummy = DummyMail(message_bytes)
     monkeypatch.setattr(ImapAgent, 'login_account', lambda self: None)
     monkeypatch.setattr('imaplib.IMAP4_SSL', lambda addr: dummy)
 
     agent = ImapAgent('user', 'pass', 'imap.example.com')
-    result = agent.download_mail_json(save=True, path=str(tmp_path) + os.sep)
+    path = str(tmp_path) + (os.sep if trailing else "")
+    result = agent.download_mail_json(save=True, path=path)
 
     data = json.loads(result)
     assert isinstance(data, list)
@@ -109,13 +113,15 @@ def test_download_mail_json(tmp_path, monkeypatch):
     assert dummy.closed
 
 
-def test_download_mail_msg(tmp_path):
+@pytest.mark.parametrize("trailing", [True, False])
+def test_download_mail_msg(tmp_path, trailing):
     message_bytes = sample_message_bytes()
     dummy = DummyMail(message_bytes)
     agent = ImapAgent('user', 'pass', 'imap.example.com')
     agent.login_account = lambda: setattr(agent, 'mail', dummy)
 
-    agent.download_mail_msg(path=str(tmp_path) + os.sep)
+    path = str(tmp_path) + (os.sep if trailing else "")
+    agent.download_mail_msg(path=path)
 
     file_path = tmp_path / 'email_0.msg'
     assert file_path.exists()
