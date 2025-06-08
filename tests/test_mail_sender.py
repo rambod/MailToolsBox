@@ -93,9 +93,35 @@ def test_send_bulk(monkeypatch):
 
     sender = DummySender()
 
-    sender.send_bulk(["a@example.com", "b@example.com"], "subj", "body")
+    result = sender.send_bulk(["a@example.com", "b@example.com"], "subj", "body")
 
     assert sent == ["a@example.com", "b@example.com"]
+    assert result["sent"] == ["a@example.com", "b@example.com"]
+    assert result["failed"] == {}
+
+
+def test_send_bulk_continues_on_failure(monkeypatch):
+    sent = []
+
+    class DummySender(EmailSender):
+        def __init__(self):
+            pass
+
+        def send(self, recipients, subject, message_body, **kwargs):
+            recipient = recipients[0]
+            if recipient == "b@example.com":
+                raise ValueError("boom")
+            sent.append(recipient)
+
+    sender = DummySender()
+
+    result = sender.send_bulk(
+        ["a@example.com", "b@example.com", "c@example.com"], "subj", "body"
+    )
+
+    assert sent == ["a@example.com", "c@example.com"]
+    assert result["sent"] == ["a@example.com", "c@example.com"]
+    assert list(result["failed"].keys()) == ["b@example.com"]
 
 
 def test_send_template_passes_bcc(monkeypatch):
