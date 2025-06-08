@@ -161,6 +161,54 @@ def test_send_template_passes_bcc(monkeypatch):
     assert captured["cc"] == ["cc@example.com"]
 
 
+def test_send_template_custom_directory(monkeypatch):
+    loader_called = {}
+
+    def fake_loader(path):
+        loader_called["path"] = path
+        return "loader"
+
+    def fake_env(loader=None, autoescape=None):
+        loader_called["loader"] = loader
+        return types.SimpleNamespace(
+            get_template=lambda name: types.SimpleNamespace(
+                render=lambda **kw: "rendered"
+            )
+        )
+
+    from MailToolsBox import mailSender as ms
+
+    monkeypatch.setattr(ms, "FileSystemLoader", fake_loader)
+    monkeypatch.setattr(ms, "Environment", fake_env)
+
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+        template_dir="/tmp/custom",
+    )
+
+    captured = {}
+
+    def fake_send(recipients, subject, message_body, **kwargs):
+        captured["recipients"] = recipients
+        captured["body"] = message_body
+
+    monkeypatch.setattr(sender, "send", fake_send)
+
+    sender.send_template(
+        recipient="to@example.com",
+        subject="Subj",
+        template_name="tmpl.html",
+        context={},
+    )
+
+    assert loader_called["path"] == "/tmp/custom"
+    assert loader_called["loader"] == "loader"
+    assert captured["recipients"] == ["to@example.com"]
+    assert captured["body"] == "rendered"
+
+
 class DummyAsyncSMTP:
     def __init__(self):
         self.started_tls = False
