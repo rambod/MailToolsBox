@@ -7,7 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from email.utils import COMMASPACE, formatdate
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from typing import List, Optional, Iterable
+from typing import List, Optional, Iterable, Tuple
 from pathlib import Path
 import logging
 from ssl import create_default_context
@@ -80,23 +80,26 @@ class EmailSender:
             subject: str,
             recipients: Iterable[str],
             cc: Optional[Iterable[str]] = None
-    ) -> MIMEMultipart:
-        """Create MIME message with proper headers."""
+    ) -> Tuple[MIMEMultipart, List[str], Optional[List[str]]]:
+        """Create MIME message with proper headers and return validated lists."""
         msg = MIMEMultipart()
         msg['From'] = self.user_email
         msg['Subject'] = subject
         msg['Date'] = formatdate(localtime=True)
 
         if self.validate_emails:
-            recipients = [self._validate_email(r) for r in recipients]
+            recipients_list = [self._validate_email(r) for r in recipients]
+        else:
+            recipients_list = list(recipients)
 
-        msg['To'] = COMMASPACE.join(recipients)
+        msg['To'] = COMMASPACE.join(recipients_list)
 
+        validated_cc = None
         if cc:
-            validated_cc = [self._validate_email(c) for c in cc] if self.validate_emails else cc
+            validated_cc = [self._validate_email(c) for c in cc] if self.validate_emails else list(cc)
             msg['Cc'] = COMMASPACE.join(validated_cc)
 
-        return msg
+        return msg, recipients_list, validated_cc
 
     def _add_attachments(self, msg: MIMEMultipart, attachments: Iterable[str]) -> None:
         """Add multiple attachments to the message."""
@@ -142,12 +145,16 @@ class EmailSender:
             html: bool = False
     ) -> None:
         """Synchronous email sending with improved error handling."""
-        logger.info("Sending email to %s", ", ".join(recipients))
+        recipients_list = list(recipients)
+        cc_list = list(cc) if cc else None
+        bcc_list = list(bcc) if bcc else None
+
+        logger.info("Sending email to %s", ", ".join(recipients_list))
         # Build the MIME message without exposing BCC recipients
-        msg = self._create_base_message(subject, recipients, cc)
+        msg, validated_recipients, validated_cc = self._create_base_message(subject, recipients_list, cc_list)
         validated_bcc = None
-        if bcc:
-            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else list(bcc)
+        if bcc_list:
+            validated_bcc = [self._validate_email(b) for b in bcc_list] if self.validate_emails else bcc_list
         msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
 
         if attachments:
@@ -158,9 +165,9 @@ class EmailSender:
                 if use_tls:
                     server.starttls(context=self.ssl_context)
                 server.login(self.user_email, self.user_email_password)
-                all_recipients = list(recipients)
-                if cc:
-                    all_recipients.extend(cc)
+                all_recipients = list(validated_recipients)
+                if validated_cc:
+                    all_recipients.extend(validated_cc)
                 if validated_bcc:
                     all_recipients.extend(validated_bcc)
                 server.send_message(msg, to_addrs=all_recipients)
@@ -207,10 +214,14 @@ class EmailSender:
             html: bool = False
     ) -> None:
         """Asynchronous email sending using aiosmtplib."""
-        msg = self._create_base_message(subject, recipients, cc)
+        recipients_list = list(recipients)
+        cc_list = list(cc) if cc else None
+        bcc_list = list(bcc) if bcc else None
+
+        msg, validated_recipients, validated_cc = self._create_base_message(subject, recipients_list, cc_list)
         validated_bcc = None
-        if bcc:
-            validated_bcc = [self._validate_email(b) for b in bcc] if self.validate_emails else list(bcc)
+        if bcc_list:
+            validated_bcc = [self._validate_email(b) for b in bcc_list] if self.validate_emails else bcc_list
         msg.attach(MIMEText(message_body, 'html' if html else 'plain'))
 
         if attachments:
@@ -221,9 +232,9 @@ class EmailSender:
                 if use_tls:
                     await server.starttls(context=self.ssl_context)
                 await server.login(self.user_email, self.user_email_password)
-                all_recipients = list(recipients)
-                if cc:
-                    all_recipients.extend(cc)
+                all_recipients = list(validated_recipients)
+                if validated_cc:
+                    all_recipients.extend(validated_cc)
                 if validated_bcc:
                     all_recipients.extend(validated_bcc)
                 await server.send_message(msg, to_addrs=all_recipients)

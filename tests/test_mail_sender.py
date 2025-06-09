@@ -304,3 +304,50 @@ def test_add_attachments_async(monkeypatch):
     assert part.get_payload(decode=True) == b"data"
 
 
+def test_send_accepts_generator(monkeypatch):
+    smtp_instance = mock.MagicMock()
+    smtp_instance.__enter__.return_value = smtp_instance
+    smtp_instance.__exit__.return_value = None
+    smtp_class = mock.MagicMock(return_value=smtp_instance)
+    monkeypatch.setattr(smtplib, "SMTP", smtp_class)
+
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+    )
+
+    def gen():
+        yield "to@example.com"
+        yield "other@example.com"
+
+    sender.send(recipients=gen(), subject="Subj", message_body="Body")
+
+    args, kwargs = smtp_instance.send_message.call_args
+    to_addrs = kwargs["to_addrs"]
+    assert set(to_addrs) == {"to@example.com", "other@example.com"}
+
+
+def test_send_async_accepts_generator(monkeypatch):
+    smtp_instance = DummyAsyncSMTP()
+    monkeypatch.setattr(sys.modules["aiosmtplib"], "SMTP", lambda **kw: smtp_instance)
+
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+    )
+
+    async def run():
+        def gen():
+            yield "to@example.com"
+            yield "other@example.com"
+
+        await sender.send_async(recipients=gen(), subject="Subj", message_body="Body")
+
+    import asyncio
+    asyncio.run(run())
+
+    assert set(smtp_instance.to_addrs) == {"to@example.com", "other@example.com"}
+
+
