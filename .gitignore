@@ -5,3 +5,9 @@ MailToolsBox.egg-info/PKG-INFO
 MailToolsBox.egg-info/requires.txt
 MailToolsBox.egg-info/SOURCES.txt
 MailToolsBox.egg-info/top_level.txt
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.vscode/
+
