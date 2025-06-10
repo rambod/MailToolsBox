@@ -1,4 +1,8 @@
 from setuptools import setup, find_packages
+from pathlib import Path
+
+with open(Path(__file__).resolve().parent / "README.md", encoding="utf-8") as fh:
+    long_description = fh.read()
 
 setup(
     name='MailToolsBox',
@@ -6,7 +10,7 @@ setup(
     version='1.0.1',  # Increased version for major revamp
     license='MIT',
     description='A modern and efficient Python library for sending emails with SMTP, Jinja2 templates, and attachments.',
-    long_description=open('README.md', encoding='utf-8').read(),
+    long_description=long_description,
     long_description_content_type="text/markdown",
     author='Rambod Ghashghai',
     author_email='gh.rambod@gmail.com',
