@@ -7,6 +7,13 @@ from typing import List
 
 
 class ImapAgent:
+    """Simple IMAP client used to fetch messages from a mail server.
+
+    It provides ``login_account`` and ``logout_account`` helpers for
+    managing the connection and several download methods—
+    ``download_mail_text``, ``download_mail_json`` and
+    ``download_mail_msg``—to retrieve emails in different formats.
+    """
     def __init__(self, email_account, password, server_address):
         self.email_account = email_account
         self.password = password
