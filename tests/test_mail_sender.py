@@ -5,6 +5,7 @@ import types
 import sys
 from pathlib import Path
 from email.mime.multipart import MIMEMultipart
+import time
 import pytest
 
 # Provide dummy aiosmtplib to satisfy imports
@@ -349,5 +350,81 @@ def test_send_async_accepts_generator(monkeypatch):
     asyncio.run(run())
 
     assert set(smtp_instance.to_addrs) == {"to@example.com", "other@example.com"}
+
+
+def test_send_bulk_async(monkeypatch):
+    sent = []
+
+    class DummySender(EmailSender):
+        def __init__(self):
+            pass
+
+        async def send_async(self, recipients, subject, message_body, **kwargs):
+            sent.append(recipients[0])
+
+    sender = DummySender()
+
+    import asyncio
+
+    result = asyncio.run(
+        sender.send_bulk_async(["a@example.com", "b@example.com"], "subj", "body")
+    )
+
+    assert sent == ["a@example.com", "b@example.com"]
+    assert result["sent"] == ["a@example.com", "b@example.com"]
+    assert result["failed"] == {}
+
+
+def test_send_bulk_async_continues_on_failure(monkeypatch):
+    sent = []
+
+    class DummySender(EmailSender):
+        def __init__(self):
+            pass
+
+        async def send_async(self, recipients, subject, message_body, **kwargs):
+            recipient = recipients[0]
+            if recipient == "b@example.com":
+                raise ValueError("boom")
+            sent.append(recipient)
+
+    sender = DummySender()
+
+    import asyncio
+
+    result = asyncio.run(
+        sender.send_bulk_async(
+            ["a@example.com", "b@example.com", "c@example.com"], "subj", "body"
+        )
+    )
+
+    assert sent == ["a@example.com", "c@example.com"]
+    assert result["sent"] == ["a@example.com", "c@example.com"]
+    assert list(result["failed"].keys()) == ["b@example.com"]
+
+
+def test_send_bulk_async_concurrent(monkeypatch):
+    start = {}
+    end = {}
+
+    class DummySender(EmailSender):
+        def __init__(self):
+            pass
+
+        async def send_async(self, recipients, subject, message_body, **kwargs):
+            r = recipients[0]
+            start[r] = time.perf_counter()
+            await asyncio.sleep(0.05)
+            end[r] = time.perf_counter()
+
+    sender = DummySender()
+
+    import asyncio
+
+    asyncio.run(
+        sender.send_bulk_async(["a@example.com", "b@example.com"], "s", "b")
+    )
+
+    assert start["b@example.com"] < end["a@example.com"]
 
 

@@ -2,6 +2,7 @@ import os
 import smtplib
 import aiosmtplib
 import aiofiles
+import asyncio
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -200,6 +201,35 @@ class EmailSender:
             except Exception as exc:  # pragma: no cover - logging side effect
                 logger.exception("Failed sending email to %s", recipient)
                 results["failed"][recipient] = exc
+        return results
+
+    async def send_bulk_async(
+            self,
+            recipients: Iterable[str],
+            subject: str,
+            message_body: str,
+            **kwargs,
+    ) -> dict:
+        """Asynchronously send the same message to many recipients individually.
+
+        Returns a summary dictionary like :meth:`send_bulk` with ``sent`` and
+        ``failed`` keys containing lists of successful recipients and mapping of
+        failed recipients to exceptions.
+        """
+        recipients_list = list(recipients)
+        tasks = [
+            self.send_async([r], subject, message_body, **kwargs)
+            for r in recipients_list
+        ]
+
+        results = {"sent": [], "failed": {}}
+        send_results = await asyncio.gather(*tasks, return_exceptions=True)
+        for recipient, res in zip(recipients_list, send_results):
+            if isinstance(res, Exception):  # pragma: no cover - logging side effect
+                logger.exception("Failed sending email to %s", recipient)
+                results["failed"][recipient] = res
+            else:
+                results["sent"].append(recipient)
         return results
 
     async def send_async(
