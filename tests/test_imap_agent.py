@@ -40,7 +40,8 @@ class DummyMail:
         self.selected = None
     def login(self, user, password):
         self.logged_in = True
-    def select(self, mailbox):
+        return ("OK", [b""])
+    def select(self, mailbox, readonly=True):
         self.selected = mailbox
         return ('OK', [b''])
     def uid(self, command, *args):
@@ -118,9 +119,15 @@ def test_download_mail_msg(tmp_path, trailing):
     dummy = DummyMail(message_bytes)
     agent = ImapAgent('user', 'pass', 'imap.example.com')
     agent.login_account = lambda: setattr(agent, 'mail', dummy)
+    # avoid real network in _open
+    import imaplib as _imaplib
+    _orig_ssl = _imaplib.IMAP4_SSL
+    _imaplib.IMAP4_SSL = lambda *a, **k: dummy
 
     path = str(tmp_path) + (os.sep if trailing else "")
     agent.download_mail_msg(path=path)
+
+    _imaplib.IMAP4_SSL = _orig_ssl
 
     file_path = tmp_path / 'email_0.msg'
     assert file_path.exists()
