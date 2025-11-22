@@ -1,18 +1,23 @@
 from __future__ import annotations
 
-import imaplib
-import email
-import ssl
-import os
-import json
-import datetime as dt
 import base64
+import datetime as dt
+import email
+import imaplib
+import json
+import logging
+import os
+import re
+import ssl
 from dataclasses import dataclass, field
-from typing import List, Optional, Iterable, Tuple, Dict, Any
-from pathlib import Path
-from enum import Enum
 from email.header import decode_header, make_header
 from email.message import Message
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 # ----------------------------- Security -----------------------------
@@ -66,6 +71,15 @@ def _decode_header_value(value: Optional[str]) -> str:
     except Exception:
         return value
 
+
+def _decode_filename(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    try:
+        return str(make_header(decode_header(value)))
+    except Exception:
+        return value
+
 def _parse_addresses(value: Optional[str]) -> List[MailAddress]:
     if not value:
         return []
@@ -79,11 +93,13 @@ def _to_local_datetime(date_hdr: Optional[str]) -> Optional[dt.datetime]:
     if not date_hdr:
         return None
     try:
-        t = email.utils.parsedate_tz(date_hdr)
-        if not t:
+        dt_obj = email.utils.parsedate_to_datetime(date_hdr)
+        if dt_obj is None:
             return None
-        timestamp = email.utils.mktime_tz(t)
-        return dt.datetime.fromtimestamp(timestamp)
+        # Assume UTC when timezone missing to keep comparisons consistent.
+        if dt_obj.tzinfo is None:
+            dt_obj = dt_obj.replace(tzinfo=dt.timezone.utc)
+        return dt_obj
     except Exception:
         return None
 
@@ -232,8 +248,12 @@ class ImapClient:
             # format: b'(\\HasNoChildren) "/" "INBOX/Sub"'
             if not line:
                 continue
-            parts = line.decode("utf-8", errors="ignore").split(" ")
-            name = parts[-1].strip('"')
+            decoded = line.decode("utf-8", errors="ignore")
+            match = re.search(r'"((?:\\.|[^"])*)"$', decoded)
+            if match:
+                name = match.group(1).replace(r"\"", '"')
+            else:
+                name = decoded.split(" ", 1)[-1].strip('"')
             names.append(name)
         return names
 
@@ -293,12 +313,26 @@ class ImapClient:
         text_body: Optional[str] = None
         html_body: Optional[str] = None
         attachments: List[MailPart] = []
+        used_names: Set[str] = set()
 
         if msg.is_multipart():
             for part in msg.walk():
                 ctype = part.get_content_type()
                 dispo = str(part.get("Content-Disposition") or "")
-                filename = part.get_filename()
+                filename_raw = part.get_filename()
+                filename = _decode_filename(filename_raw)
+                if filename:
+                    filename = Path(filename).name
+                    if filename in used_names:
+                        stem = Path(filename).stem
+                        suffix = Path(filename).suffix
+                        counter = 1
+                        candidate = f"{stem}_{counter}{suffix}"
+                        while candidate in used_names:
+                            counter += 1
+                            candidate = f"{stem}_{counter}{suffix}"
+                        filename = candidate
+                    used_names.add(filename)
                 is_attach = "attachment" in dispo.lower() or bool(filename)
                 charset = part.get_content_charset() or "utf-8"
 
@@ -355,7 +389,8 @@ class ImapClient:
         for uid in uids:
             try:
                 out.append(self.fetch(uid))
-            except Exception:
+            except Exception as exc:
+                logger.warning("Failed to fetch UID %s: %s", uid, exc)
                 continue
         return out
 
@@ -499,3 +534,100 @@ class ImapClient:
         self._ensure()
         if not self.selected_mailbox:
             self.select("INBOX")
+
+
+# ----------------------------- Legacy shim -----------------------------
+
+
+class ImapAgent(ImapClient):
+    """
+    Backward compatible adapter that mirrors the old ImapAgent API
+    on top of the modern ImapClient.
+    """
+
+    def __init__(
+        self,
+        email_account: str,
+        password: Optional[str],
+        server_address: str,
+        *,
+        port: int = 993,
+        security_mode: SecurityMode = SecurityMode.SSL,
+        oauth2_access_token: Optional[str] = None,
+        ssl_context: Optional[ssl.SSLContext] = None,
+        allow_invalid_certs: bool = False,
+        timeout: int = 30,
+    ) -> None:
+        super().__init__(
+            email_account=email_account,
+            password=password,
+            server_address=server_address,
+            port=port,
+            security_mode=security_mode,
+            oauth2_access_token=oauth2_access_token,
+            ssl_context=ssl_context,
+            allow_invalid_certs=allow_invalid_certs,
+            timeout=timeout,
+        )
+        self.mail: Optional[imaplib.IMAP4] = None
+
+    def login_account(self) -> imaplib.IMAP4:
+        self.login()
+        self.mail = self.conn
+        return self.mail
+
+    def logout_account(self) -> None:
+        self.logout()
+        self.mail = None
+
+    def __enter__(self) -> "ImapAgent":
+        self.login_account()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.logout_account()
+
+    def _sync_mail_alias(self) -> None:
+        if self.mail and self.conn is None:
+            self.conn = self.mail
+
+    def logout(self) -> None:
+        super().logout()
+        self.mail = None
+
+    def download_mail_text(self, path: str = "", mailbox: str = "INBOX") -> Path:
+        self._sync_mail_alias()
+        return super().download_mail_text(path=path, mailbox=mailbox)
+
+    def download_mail_json(
+        self,
+        lookup: str = "ALL",
+        save: bool = False,
+        path: str = "",
+        file_name: str = "mail.json",
+        mailbox: str = "INBOX",
+    ) -> str:
+        self._sync_mail_alias()
+        return super().download_mail_json(lookup=lookup, save=save, path=path, file_name=file_name, mailbox=mailbox)
+
+    def download_mail_msg(self, path: str = "", lookup: str = "ALL", mailbox: str = "INBOX") -> List[Path]:
+        """
+        Save each selected message as a .msg file (wrapper over .eml bytes).
+        """
+        self._sync_mail_alias()
+        self.login()
+        try:
+            self.select(mailbox)
+            uids = self.search(lookup)
+            out_paths: List[Path] = []
+            target_dir = Path(path or ".")
+            target_dir.mkdir(parents=True, exist_ok=True)
+            for i, uid in enumerate(uids):
+                item = self.fetch(uid)
+                file_name = f"email_{i}.msg"
+                out = target_dir / file_name
+                out.write_bytes(item.raw)
+                out_paths.append(out)
+            return out_paths
+        finally:
+            self.logout()

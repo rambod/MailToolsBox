@@ -75,7 +75,7 @@ def sample_message_bytes():
 
 def test_login_account(monkeypatch):
     dummy = DummyMail(sample_message_bytes())
-    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda addr: dummy)
+    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda *args, **kwargs: dummy)
     agent = ImapAgent('user', 'pass', 'imap.example.com')
     agent.login_account()
     assert agent.mail is dummy
@@ -104,7 +104,7 @@ def test_download_mail_json(tmp_path, monkeypatch, trailing):
     message_bytes = sample_message_bytes()
     dummy = DummyMail(message_bytes)
     monkeypatch.setattr(ImapAgent, 'login_account', lambda self: None)
-    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda addr: dummy)
+    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda *args, **kwargs: dummy)
 
     agent = ImapAgent('user', 'pass', 'imap.example.com')
     path = str(tmp_path) + (os.sep if trailing else "")
@@ -146,12 +146,11 @@ def test_from_env(monkeypatch):
 
 def test_context_manager(monkeypatch):
     dummy = DummyMail(sample_message_bytes())
-    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda addr: dummy)
+    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda *args, **kwargs: dummy)
 
     with ImapAgent('user', 'pass', 'imap.example.com') as agent:
         assert agent.mail is dummy
         assert dummy.logged_in
     assert dummy.closed
     assert agent.mail is None
-
 

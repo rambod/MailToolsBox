@@ -53,7 +53,7 @@ sender.send(
 ### Read emails
 
 ```python
-from MailToolsBox.imap_client import ImapClient  # or the path you placed it under
+from MailToolsBox import ImapClient
 
 with ImapClient(
     email_account="you@example.com",
@@ -84,6 +84,8 @@ with ImapClient(
 - `ssl`: implicit SSL on connect, typical for port 465.
 - `none`: no TLS. Use only inside trusted networks.
 
+You can also pass `use_tls=True` to force STARTTLS regardless of the configured `security_mode` (or `use_tls=False` to force plaintext for trusted relays).
+
 ### Gmail and Exchange recipes
 
 ```python
@@ -94,6 +96,17 @@ sender.send(["to@example.com"], "Hi", "Body")
 # Exchange Online with SMTP AUTH
 exchange = EmailSender.for_exchange_smtp_auth("you@company.com", "password")
 exchange.send(["person@company.com"], "Status", "Body")
+
+# Exchange on-prem with self-signed certs (only on trusted networks)
+exchange_on_prem = EmailSender(
+    user_email="you@corp.local",
+    server_smtp_address="mail.corp.local",
+    user_email_password="password",
+    port=587,
+    security_mode="starttls",
+    allow_invalid_certs=True,
+)
+exchange_on_prem.send(["admin@corp.local"], "Status", "Body")
 ```
 
 ### OAuth2 XOAUTH2
@@ -302,11 +315,14 @@ legacy = SendAgent("you@example.com", "smtp.example.com", "pw", port=587)
 legacy.send_mail(["to@example.com"], "Subject", "Body", tls=True)
 ```
 
+`ImapAgent` remains as a thin adapter over `ImapClient` for projects that still import the legacy name.
+
 ---
 
 ## Security notes
 
 - Prefer `ssl` on 465 or `starttls` on 587.
+- For on-prem Exchange or legacy servers with self-signed certificates, pass `allow_invalid_certs=True` (SMTP/IMAP) only on trusted networks.
 - Use app passwords when your provider offers them.
 - Prefer OAuth2 tokens for long term services.
 - Use `none` only on trusted networks.

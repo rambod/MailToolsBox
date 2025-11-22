@@ -1,6 +1,6 @@
 from MailToolsBox.mailSender import EmailSender, SendAgent
-from MailToolsBox.imapClient import ImapClient
+from MailToolsBox.imapClient import ImapAgent, ImapClient
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
-__all__ = ["EmailSender", "SendAgent", "ImapClient", "__version__"]
+__all__ = ["EmailSender", "SendAgent", "ImapClient", "ImapAgent", "__version__"]

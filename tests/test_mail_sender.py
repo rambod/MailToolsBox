@@ -62,7 +62,7 @@ def test_email_sender_send(monkeypatch):
         use_tls=True,
     )
 
-    smtp_class.assert_called_with("smtp.example.com", 25, timeout=10)
+    smtp_class.assert_called_with("smtp.example.com", 25, timeout=30)
     smtp_instance.starttls.assert_called()
     smtp_instance.login.assert_called_with("user@example.com", "pass")
     smtp_instance.send_message.assert_called()
@@ -216,6 +216,7 @@ class DummyAsyncSMTP:
         self.logged_in = None
         self.sent_message = None
         self.to_addrs = None
+        self.extensions = {"starttls"}
 
     async def __aenter__(self):
         return self
@@ -223,8 +224,17 @@ class DummyAsyncSMTP:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
+    async def connect(self):
+        return None
+
     async def starttls(self, context=None):
         self.started_tls = True
+
+    def supports_extension(self, ext):
+        return ext.lower() in self.extensions
+
+    async def ehlo(self, hostname=None):
+        return None
 
     async def login(self, user, password):
         self.logged_in = (user, password)
@@ -232,6 +242,9 @@ class DummyAsyncSMTP:
     async def send_message(self, msg, to_addrs):
         self.sent_message = msg
         self.to_addrs = to_addrs
+
+    async def quit(self):
+        return None
 
 
 def test_send_async_uses_async_attachment(monkeypatch):
@@ -426,5 +439,3 @@ def test_send_bulk_async_concurrent(monkeypatch):
     )
 
     assert start["b@example.com"] < end["a@example.com"]
-
-

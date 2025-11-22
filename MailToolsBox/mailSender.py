@@ -20,7 +20,7 @@ import mimetypes
 
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Iterable, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -116,6 +116,16 @@ class EmailSender:
             "EmailSender initialized for %s (%s:%s, security=%s)",
             self.user_email, self.server_smtp_address, self.port, self.security_mode
         )
+
+    def _resolve_security_mode(
+        self,
+        security_mode: Optional[SecurityMode],
+        use_tls: Optional[bool],
+    ) -> SecurityMode:
+        mode = SecurityMode(security_mode) if security_mode else self.security_mode
+        if use_tls is not None:
+            mode = SecurityMode.STARTTLS if use_tls else SecurityMode.NONE
+        return mode
 
     # ----------------- Convenience constructors -----------------
 
@@ -309,9 +319,9 @@ class EmailSender:
 
     # ----------------- Connection helpers -----------------
 
-    def _open_sync(self) -> smtplib.SMTP:
+    def _open_sync(self, mode: Optional[SecurityMode] = None) -> smtplib.SMTP:
         """Open a synchronous SMTP connection with requested security behavior."""
-        mode = self.security_mode
+        mode = mode or self.security_mode
         if mode == SecurityMode.AUTO and self.port == 465:
             mode = SecurityMode.SSL
 
@@ -340,29 +350,19 @@ class EmailSender:
         # mode NONE means keep plain
         return server
 
-    def _aiosmtp(self) -> aiosmtplib.SMTP:
+    def _aiosmtp(self, mode: SecurityMode) -> aiosmtplib.SMTP:
         """Create an aiosmtplib.SMTP instance with proper TLS flags."""
-        mode = self.security_mode
         if mode == SecurityMode.AUTO and self.port == 465:
             mode = SecurityMode.SSL
 
         use_tls = mode == SecurityMode.SSL
-        if mode == SecurityMode.STARTTLS:
-            start_tls = True
-        elif mode == SecurityMode.NONE:
-            start_tls = False
-        elif mode == SecurityMode.SSL:
-            start_tls = False  # implicit TLS already
-        else:
-            start_tls = None  # auto upgrade if server advertises STARTTLS
-
         # Note: no duplicated parameters here
         return aiosmtplib.SMTP(
             hostname=self.server_smtp_address,
             port=self.port,
             timeout=self.timeout,
             use_tls=use_tls,
-            start_tls=start_tls,
+            start_tls=False,  # handle STARTTLS manually after connect
             tls_context=self.ssl_context,
         )
 
@@ -410,6 +410,7 @@ class EmailSender:
         attachments: Optional[Iterable[str]] = None,
         html: bool = False,
         security_mode: Optional[SecurityMode] = None,
+        use_tls: Optional[bool] = None,
     ) -> None:
         """Send a single message synchronously."""
         recipients_list = list(recipients)
@@ -426,13 +427,9 @@ class EmailSender:
         if attachments:
             self._add_attachments(msg, attachments)
 
-        # Temporarily override security if provided at call site
-        original_mode = self.security_mode
-        if security_mode:
-            self.security_mode = SecurityMode(security_mode)
-
+        mode = self._resolve_security_mode(security_mode, use_tls)
         try:
-            with self._open_sync() as server:
+            with self._open_sync(mode) as server:
                 self._smtp_login_sync(server)
                 all_recipients = list(validated_to)
                 if validated_cc:
@@ -446,8 +443,6 @@ class EmailSender:
         except Exception as e:
             logger.error("Unexpected error: %s", str(e))
             raise
-        finally:
-            self.security_mode = original_mode
 
     def send_bulk(
         self,
@@ -478,6 +473,7 @@ class EmailSender:
         bcc: Optional[Iterable[str]] = None,
         attachments: Optional[Iterable[str]] = None,
         security_mode: Optional[SecurityMode] = None,
+        use_tls: Optional[bool] = None,
     ) -> None:
         """Render a Jinja2 template and send as HTML."""
         template = self.template_env.get_template(template_name)
@@ -491,6 +487,7 @@ class EmailSender:
             attachments=attachments,
             html=True,
             security_mode=security_mode,
+            use_tls=use_tls,
         )
 
     # ----------------- Public API: async -----------------
@@ -506,6 +503,7 @@ class EmailSender:
         attachments: Optional[Iterable[str]] = None,
         html: bool = False,
         security_mode: Optional[SecurityMode] = None,
+        use_tls: Optional[bool] = None,
     ) -> None:
         """Send a single message asynchronously using aiosmtplib."""
         recipients_list = list(recipients)
@@ -522,14 +520,20 @@ class EmailSender:
         if attachments:
             await self._add_attachments_async(msg, attachments)
 
-        original_mode = self.security_mode
-        if security_mode:
-            self.security_mode = SecurityMode(security_mode)
+        mode = self._resolve_security_mode(security_mode, use_tls)
 
         try:
-            server = self._aiosmtp()
+            server = self._aiosmtp(mode)
             await server.connect()
             try:
+                if mode == SecurityMode.STARTTLS or (
+                    mode == SecurityMode.AUTO and server.supports_extension("starttls")
+                ):
+                    await server.starttls(context=self.ssl_context)
+                    if self.ehlo_hostname:
+                        await server.ehlo(self.ehlo_hostname)
+                    else:
+                        await server.ehlo()
                 await self._smtp_login_async(server)
                 all_recipients = list(validated_to)
                 if validated_cc:
@@ -545,8 +549,6 @@ class EmailSender:
         except Exception as e:
             logger.error("Unexpected error: %s", str(e))
             raise
-        finally:
-            self.security_mode = original_mode
 
     async def send_bulk_async(
         self,
