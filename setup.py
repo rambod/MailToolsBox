@@ -6,7 +6,7 @@ README = (ROOT / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="MailToolsBox",
-    version="1.1.0",
+    version="2.0.0",
     description="Modern sync and async SMTP with optional TLS/SSL, OAuth2 XOAUTH2, Jinja2 templates, and attachments.",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -14,7 +14,7 @@ setup(
     author="Rambod Ghashghai",
     author_email="gh.rambod@gmail.com",
     url="https://github.com/rambod/MailToolsBox",
-    download_url="https://github.com/rambod/MailToolsBox/archive/refs/tags/v1.1.0.tar.gz",
+    download_url="https://github.com/rambod/MailToolsBox/archive/refs/tags/v2.0.0.tar.gz",
     packages=find_packages(exclude=("tests", "examples")),
     include_package_data=True,  # needed with package_data to ship templates
     package_data={
