@@ -28,7 +28,6 @@ from email.mime.application import MIMEApplication
 from email.mime.base import MIMEBase
 from email import encoders
 from email.utils import formatdate
-from email_validator import validate_email, EmailNotValidError
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 # ---------------------------------------------------------------------
@@ -36,6 +35,22 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 # ---------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+
+# ---------------------------------------------------------------------
+# Optional imports
+# ---------------------------------------------------------------------
+def _load_email_validator():
+    """Import email-validator only when validation is requested."""
+    try:
+        from email_validator import validate_email, EmailNotValidError  # type: ignore
+    except Exception as exc:  # ImportError or runtime import issues
+        raise ImportError(
+            "Email validation requested but the optional dependency `email-validator` "
+            "is not installed. Install it with `pip install \"MailToolsBox[validation]\"` "
+            "or set validate_emails=False."
+        ) from exc
+    return validate_email, EmailNotValidError
 
 
 # ---------------------------------------------------------------------
@@ -75,7 +90,7 @@ class EmailSender:
         *,
         port: int = 587,
         timeout: int = 30,
-        validate_emails: bool = True,
+        validate_emails: bool = False,
         template_dir: Optional[str] = None,
         security_mode: SecurityMode = SecurityMode.AUTO,
         oauth2_access_token: Optional[str] = None,
@@ -186,10 +201,11 @@ class EmailSender:
 
     def _validate_email(self, email_address: str) -> str:
         """Validate and normalize email address using email-validator."""
+        validate_email, email_error = _load_email_validator()
         try:
             result = validate_email(email_address, check_deliverability=False)
             return result.normalized
-        except EmailNotValidError as e:
+        except email_error as e:
             logger.error("Invalid email address: %s", email_address)
             raise ValueError(f"Invalid email address: {email_address}") from e
 

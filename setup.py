@@ -23,17 +23,24 @@ setup(
     },
     install_requires=[
         "Jinja2>=3.0.2",
-        "email-validator>=2.0.0",
         "aiosmtplib>=2.0.0",
         "aiofiles>=23.0.0",
     ],
     extras_require={
+        "validation": [
+            "email-validator>=2.0.0",
+        ],
         "dev": [
             "pytest>=7.0",
             "pytest-asyncio>=0.20",
             "mypy>=1.0",
             "black>=24.0",
             "ruff>=0.5",
+            "email-validator>=2.0.0",
+        ],
+        "test": [
+            "pytest>=7.0",
+            "pytest-asyncio>=0.20",
         ],
         "docs": [
             "mkdocs>=1.5",

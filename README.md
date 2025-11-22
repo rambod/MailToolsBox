@@ -14,7 +14,7 @@ MailToolsBox is a modern, pragmatic email toolkit for Python. It gives you clean
 - Jinja2 templates with auto plain text fallback
 - MIME smart attachment handling
 - Bulk sending helpers
-- Email validation
+- Optional email validation (opt-in extra)
 - Environment variable configuration
 - Backward compatibility shim `SendAgent`
 
@@ -24,6 +24,9 @@ MailToolsBox is a modern, pragmatic email toolkit for Python. It gives you clean
 
 ```bash
 pip install MailToolsBox
+
+# Optional: include address validation support
+pip install "MailToolsBox[validation]"
 ```
 
 ---
@@ -41,6 +44,8 @@ sender = EmailSender(
     user_email_password="password",
     port=587,                        # typical for STARTTLS
     security_mode="starttls"         # or "auto"
+    # validation is off by default to keep dependencies light;
+    # enable with validate_emails=True after installing the [validation] extra
 )
 
 sender.send(
@@ -104,7 +109,7 @@ exchange_on_prem = EmailSender(
     user_email_password="password",
     port=587,
     security_mode="starttls",
-    allow_invalid_certs=True,
+    allow_invalid_certs=True,  # accept self-signed certs on trusted networks
 )
 exchange_on_prem.send(["admin@corp.local"], "Status", "Body")
 ```
@@ -189,7 +194,8 @@ imap = ImapClient(
     password="password",
     server_address="imap.example.com",
     port=993,
-    security_mode="ssl"
+    security_mode="ssl",
+    allow_invalid_certs=False,  # set True to accept self-signed certs
 )
 imap.login()
 imap.select("INBOX")
@@ -213,6 +219,8 @@ export IMAP_PORT=993
 export IMAP_SECURITY=ssl
 # Optional OAuth token
 export IMAP_OAUTH2_TOKEN=ya29.a0Af...
+# Accept self-signed certs for dev/on-prem only
+export IMAP_ALLOW_INVALID_CERTS=1
 ```
 
 ### Search and fetch
@@ -274,7 +282,7 @@ with imap:
 
 ## Validation and templates
 
-- Addresses are normalized with `email-validator` when validation is enabled.
+- Addresses are normalized with `email-validator` only when you opt in via `validate_emails=True` and install the optional extra: `pip install "MailToolsBox[validation]"`.
 - Templates use Jinja2 with autoescape for HTML and XML.
 - HTML sending includes a plain text alternative for better deliverability.
 
@@ -322,10 +330,22 @@ legacy.send_mail(["to@example.com"], "Subject", "Body", tls=True)
 ## Security notes
 
 - Prefer `ssl` on 465 or `starttls` on 587.
+- To accept self-signed certificates for SMTP/IMAP on trusted networks, pass `allow_invalid_certs=True`.
+- To intentionally skip TLS (inside trusted networks only), use `security_mode="none"`.
 - For on-prem Exchange or legacy servers with self-signed certificates, pass `allow_invalid_certs=True` (SMTP/IMAP) only on trusted networks.
 - Use app passwords when your provider offers them.
 - Prefer OAuth2 tokens for long term services.
 - Use `none` only on trusted networks.
+
+---
+
+## Testing
+
+```bash
+pip install -e ".[dev]"        # or: pip install -r requirements-dev.txt
+pytest
+```
+Tests are network-free and rely on local fakes, so they run quickly.
 
 ---
 

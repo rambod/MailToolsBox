@@ -5,6 +5,7 @@ from unittest import mock
 import os
 import types
 import sys
+import ssl
 
 import pytest
 
@@ -27,15 +28,8 @@ sys.modules.setdefault(
         select_autoescape=lambda x: None,
     ),
 )
-sys.modules.setdefault(
-    "email_validator",
-    types.SimpleNamespace(
-        validate_email=lambda email, check_deliverability=False: types.SimpleNamespace(normalized=email),
-        EmailNotValidError=Exception,
-    ),
-)
 
-from MailToolsBox.imapClient import ImapAgent
+from MailToolsBox.imapClient import ImapAgent, SecurityMode
 
 
 class DummyMail:
@@ -154,3 +148,31 @@ def test_context_manager(monkeypatch):
     assert dummy.closed
     assert agent.mail is None
 
+
+def test_imap_allow_invalid_certs_sets_context():
+    client = ImapAgent("user@example.com", "pw", "imap.example.com", allow_invalid_certs=True)
+    assert client.ssl_context.check_hostname is False
+    assert client.ssl_context.verify_mode == ssl.CERT_NONE
+
+
+def test_imap_plain_connection(monkeypatch):
+    class PlainIMAP:
+        def __init__(self, *args, **kwargs):
+            self.started_tls = False
+            self.timeout = None
+
+        def starttls(self, ctx):
+            self.started_tls = True
+
+    monkeypatch.setattr('imaplib.IMAP4', PlainIMAP)
+
+    client = ImapAgent(
+        "user@example.com",
+        "pw",
+        "imap.example.com",
+        port=143,
+        security_mode=SecurityMode.NONE,
+    )
+    conn = client._open()
+    assert isinstance(conn, PlainIMAP)
+    assert not getattr(conn, "started_tls", False)

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from email.mime.multipart import MIMEMultipart
 import time
+import ssl
 import pytest
 
 # Provide dummy aiosmtplib to satisfy imports
@@ -25,13 +26,6 @@ sys.modules.setdefault(
         Environment=lambda **kwargs: types.SimpleNamespace(get_template=lambda name: types.SimpleNamespace(render=lambda **kw: "")),
         FileSystemLoader=lambda *args, **kwargs: None,
         select_autoescape=lambda x: None,
-    ),
-)
-sys.modules.setdefault(
-    "email_validator",
-    types.SimpleNamespace(
-        validate_email=lambda email, check_deliverability=False: types.SimpleNamespace(normalized=email),
-        EmailNotValidError=Exception,
     ),
 )
 
@@ -208,6 +202,83 @@ def test_send_template_custom_directory(monkeypatch):
     assert loader_called["loader"] == "loader"
     assert captured["recipients"] == ["to@example.com"]
     assert captured["body"] == "rendered"
+
+
+def test_email_validation_is_lazy(monkeypatch):
+    from MailToolsBox import mailSender as ms
+
+    called = {"loader": False}
+
+    def blow_up():
+        called["loader"] = True
+        raise ImportError("no validator")
+
+    monkeypatch.setattr(ms, "_load_email_validator", blow_up)
+
+    smtp_instance = mock.MagicMock()
+    smtp_instance.__enter__.return_value = smtp_instance
+    smtp_instance.__exit__.return_value = None
+    smtp_class = mock.MagicMock(return_value=smtp_instance)
+    monkeypatch.setattr(smtplib, "SMTP", smtp_class)
+
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        user_email_password="pass",
+        validate_emails=False,  # default path should not import validator
+    )
+
+    sender.send(recipients=["to@example.com"], subject="Subj", message_body="Body")
+
+    assert called["loader"] is False
+    smtp_instance.send_message.assert_called()
+
+
+def test_email_validation_requires_optional_dependency(monkeypatch):
+    from MailToolsBox import mailSender as ms
+
+    def blow_up():
+        raise ImportError("no validator")
+
+    monkeypatch.setattr(ms, "_load_email_validator", blow_up)
+
+    with pytest.raises(ImportError):
+        EmailSender(
+            user_email="user@example.com",
+            server_smtp_address="smtp.example.com",
+            validate_emails=True,
+        )
+
+
+def test_email_validation_normalizes(monkeypatch):
+    from MailToolsBox import mailSender as ms
+
+    def loader():
+        def validator(addr, check_deliverability=False):
+            return types.SimpleNamespace(normalized=addr.lower())
+
+        return validator, ValueError
+
+    monkeypatch.setattr(ms, "_load_email_validator", loader)
+
+    sender = EmailSender(
+        user_email="USER@Example.COM",
+        server_smtp_address="smtp.example.com",
+        validate_emails=True,
+    )
+
+    assert sender.user_email == "user@example.com"
+
+
+def test_allow_invalid_certs_sets_context():
+    sender = EmailSender(
+        user_email="user@example.com",
+        server_smtp_address="smtp.example.com",
+        allow_invalid_certs=True,
+    )
+
+    assert sender.ssl_context.check_hostname is False
+    assert sender.ssl_context.verify_mode == ssl.CERT_NONE
 
 
 class DummyAsyncSMTP:
