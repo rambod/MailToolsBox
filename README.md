@@ -430,15 +430,17 @@ sync and async transport code — no external network needed.
 ## Releasing
 
 Releases publish to PyPI automatically via GitHub Actions
-([`release.yml`](.github/workflows/release.yml)) using PyPI
-[Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC) — no
-API tokens are stored in the repository.
+([`release.yml`](.github/workflows/release.yml)) when a version tag is pushed.
+The workflow authenticates with a PyPI API token stored as the repository
+secret **`PYPI_API_TOKEN`** (GitHub repo → Settings → Secrets and variables →
+Actions). Prefer OIDC? See [Trusted Publishing](https://docs.pypi.org/trusted-publishers/).
 
 1. Bump the version in [`MailToolsBox/_version.py`](MailToolsBox/_version.py)
    (single source of truth) and update [`CHANGELOG.md`](CHANGELOG.md).
 2. Commit, then tag and push: `git tag v3.0.0 && git push origin v3.0.0`.
 3. The workflow verifies the tag matches the package version, builds the sdist
-   and wheel, runs `twine check`, and publishes.
+   and wheel, runs `twine check`, and publishes (idempotent — re-runs skip an
+   already-published version).
 
 To build locally without publishing:
 

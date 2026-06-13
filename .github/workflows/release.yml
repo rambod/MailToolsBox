@@ -1,9 +1,14 @@
 name: Release
 
 # Publishes to PyPI when a version tag is pushed (e.g. v3.0.0).
-# Uses PyPI Trusted Publishing (OIDC) — no API tokens stored in the repo.
-# One-time setup: on PyPI, add a trusted publisher for this repo pointing at
-# the "pypi" environment and workflow file "release.yml".
+#
+# Uses a PyPI API token stored as the repo secret PYPI_API_TOKEN.
+# One-time setup: GitHub repo → Settings → Secrets and variables → Actions →
+# "New repository secret" → name: PYPI_API_TOKEN, value: your pypi-… token.
+#
+# Prefer OIDC Trusted Publishing instead? Replace the publish step's `with:`
+# block with `permissions: id-token: write` and drop the password — see
+# https://docs.pypi.org/trusted-publishers/
 
 on:
   push:
@@ -37,9 +42,6 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write  # required for trusted publishing
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -47,3 +49,6 @@ jobs:
           path: dist/
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true  # idempotent: re-runs won't fail if the version exists
