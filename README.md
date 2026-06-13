@@ -1,5 +1,10 @@
 # MailToolsBox
 
+[![PyPI version](https://img.shields.io/pypi/v/MailToolsBox.svg)](https://pypi.org/project/MailToolsBox/)
+[![Python versions](https://img.shields.io/pypi/pyversions/MailToolsBox.svg)](https://pypi.org/project/MailToolsBox/)
+[![CI](https://github.com/rambod/MailToolsBox/actions/workflows/ci.yml/badge.svg)](https://github.com/rambod/MailToolsBox/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/pypi/l/MailToolsBox.svg)](https://github.com/rambod/MailToolsBox/blob/master/LICENSE.txt)
+
 MailToolsBox is a modern, pragmatic email toolkit for Python. It gives you clean, production‑grade SMTP sending and a capable IMAP client in one package. The design favors explicit security controls, sane defaults, and simple APIs that scale from quick scripts to services.
 
 ---
