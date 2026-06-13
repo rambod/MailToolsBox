@@ -1,33 +1,13 @@
-import builtins
 import smtplib
-from unittest import mock
-import types
-import sys
-from pathlib import Path
-from email.mime.multipart import MIMEMultipart
-import time
 import ssl
-import pytest
+import sys
+import time
+import types
+from email.mime.multipart import MIMEMultipart
+from pathlib import Path
+from unittest import mock
 
-# Provide dummy aiosmtplib to satisfy imports
-sys.modules.setdefault(
-    "aiosmtplib",
-    types.SimpleNamespace(SMTP=None, errors=types.SimpleNamespace(SMTPException=Exception)),
-)
-# Minimal stub for aiofiles
-sys.modules.setdefault(
-    "aiofiles",
-    types.SimpleNamespace(open=lambda *args, **kwargs: None),
-)
-# Minimal stub for jinja2
-sys.modules.setdefault(
-    "jinja2",
-    types.SimpleNamespace(
-        Environment=lambda **kwargs: types.SimpleNamespace(get_template=lambda name: types.SimpleNamespace(render=lambda **kw: "")),
-        FileSystemLoader=lambda *args, **kwargs: None,
-        select_autoescape=lambda x: None,
-    ),
-)
+import pytest
 
 from MailToolsBox.mailSender import EmailSender
 
@@ -90,8 +70,12 @@ def test_send_bulk(monkeypatch):
         def __init__(self):
             pass
 
-        def send(self, recipients, subject, message_body, **kwargs):
+        def _open_authed(self, **kwargs):
+            return object()  # stand-in connection, reused across recipients
+
+        def _send_over(self, server, recipients, subject, message_body, **kwargs):
             sent.append(recipients[0])
+            return "<id>"
 
     sender = DummySender()
 
@@ -102,6 +86,27 @@ def test_send_bulk(monkeypatch):
     assert result["failed"] == {}
 
 
+def test_send_bulk_reuses_single_connection(monkeypatch):
+    opened = {"count": 0}
+
+    class DummySender(EmailSender):
+        def __init__(self):
+            pass
+
+        def _open_authed(self, **kwargs):
+            opened["count"] += 1
+            return object()
+
+        def _send_over(self, server, recipients, subject, message_body, **kwargs):
+            return "<id>"
+
+    sender = DummySender()
+    sender.send_bulk(["a@example.com", "b@example.com", "c@example.com"], "s", "b")
+
+    # One connection reused for all three recipients
+    assert opened["count"] == 1
+
+
 def test_send_bulk_continues_on_failure(monkeypatch):
     sent = []
 
@@ -109,17 +114,19 @@ def test_send_bulk_continues_on_failure(monkeypatch):
         def __init__(self):
             pass
 
-        def send(self, recipients, subject, message_body, **kwargs):
+        def _open_authed(self, **kwargs):
+            return object()
+
+        def _send_over(self, server, recipients, subject, message_body, **kwargs):
             recipient = recipients[0]
             if recipient == "b@example.com":
                 raise ValueError("boom")
             sent.append(recipient)
+            return "<id>"
 
     sender = DummySender()
 
-    result = sender.send_bulk(
-        ["a@example.com", "b@example.com", "c@example.com"], "subj", "body"
-    )
+    result = sender.send_bulk(["a@example.com", "b@example.com", "c@example.com"], "subj", "body")
 
     assert sent == ["a@example.com", "c@example.com"]
     assert result["sent"] == ["a@example.com", "c@example.com"]
@@ -145,7 +152,7 @@ def test_send_template_passes_bcc(monkeypatch):
     sender.send_template(
         recipient="to@example.com",
         subject="Subj",
-        template_name="tmpl.html",
+        template_name="example.html",  # ships with the package
         context={},
         cc=["cc@example.com"],
         bcc=["bcc@example.com"],
@@ -166,9 +173,7 @@ def test_send_template_custom_directory(monkeypatch):
     def fake_env(loader=None, autoescape=None):
         loader_called["loader"] = loader
         return types.SimpleNamespace(
-            get_template=lambda name: types.SimpleNamespace(
-                render=lambda **kw: "rendered"
-            )
+            get_template=lambda name: types.SimpleNamespace(render=lambda **kw: "rendered")
         )
 
     from MailToolsBox import mailSender as ms
@@ -298,21 +303,23 @@ class DummyAsyncSMTP:
     async def connect(self):
         return None
 
-    async def starttls(self, context=None):
+    async def starttls(self, *, tls_context=None):
+        # Mirror the real aiosmtplib API: keyword-only ``tls_context``.
         self.started_tls = True
 
     def supports_extension(self, ext):
         return ext.lower() in self.extensions
 
-    async def ehlo(self, hostname=None):
+    async def ehlo(self, *, hostname=None):
         return None
 
     async def login(self, user, password):
         self.logged_in = (user, password)
 
-    async def send_message(self, msg, to_addrs):
+    async def send_message(self, msg, *, recipients=None):
+        # Mirror the real aiosmtplib API: keyword-only ``recipients``.
         self.sent_message = msg
-        self.to_addrs = to_addrs
+        self.to_addrs = recipients
 
     async def quit(self):
         return None
@@ -359,6 +366,7 @@ def test_send_async_uses_async_attachment(monkeypatch):
 
 def test_add_attachments_async(monkeypatch):
     from MailToolsBox import mailSender as ms
+
     msg = MIMEMultipart()
     sender = EmailSender(
         user_email="user@example.com",
@@ -431,6 +439,7 @@ def test_send_async_accepts_generator(monkeypatch):
         await sender.send_async(recipients=gen(), subject="Subj", message_body="Body")
 
     import asyncio
+
     asyncio.run(run())
 
     assert set(smtp_instance.to_addrs) == {"to@example.com", "other@example.com"}
@@ -450,9 +459,7 @@ def test_send_bulk_async(monkeypatch):
 
     import asyncio
 
-    result = asyncio.run(
-        sender.send_bulk_async(["a@example.com", "b@example.com"], "subj", "body")
-    )
+    result = asyncio.run(sender.send_bulk_async(["a@example.com", "b@example.com"], "subj", "body"))
 
     assert sent == ["a@example.com", "b@example.com"]
     assert result["sent"] == ["a@example.com", "b@example.com"]
@@ -477,9 +484,7 @@ def test_send_bulk_async_continues_on_failure(monkeypatch):
     import asyncio
 
     result = asyncio.run(
-        sender.send_bulk_async(
-            ["a@example.com", "b@example.com", "c@example.com"], "subj", "body"
-        )
+        sender.send_bulk_async(["a@example.com", "b@example.com", "c@example.com"], "subj", "body")
     )
 
     assert sent == ["a@example.com", "c@example.com"]
@@ -505,8 +510,6 @@ def test_send_bulk_async_concurrent(monkeypatch):
 
     import asyncio
 
-    asyncio.run(
-        sender.send_bulk_async(["a@example.com", "b@example.com"], "s", "b")
-    )
+    asyncio.run(sender.send_bulk_async(["a@example.com", "b@example.com"], "s", "b"))
 
     assert start["b@example.com"] < end["a@example.com"]

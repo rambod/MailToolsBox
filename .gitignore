@@ -1,14 +1,28 @@
-dist/mailtoolsbox-1.0.1-py3-none-any.whl
-dist/mailtoolsbox-1.0.1.tar.gz
-MailToolsBox.egg-info/dependency_links.txt
-MailToolsBox.egg-info/PKG-INFO
-MailToolsBox.egg-info/requires.txt
-MailToolsBox.egg-info/SOURCES.txt
-MailToolsBox.egg-info/top_level.txt
-__pycache__/
-*.py[cod]
-*.egg-info/
+# Build artifacts
+build/
 dist/
+*.egg-info/
+*.py[cod]
+__pycache__/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# IDE / OS
+.idea/
 .vscode/
+.DS_Store
+
+# Secrets / publishing
 .pypirc
 .pypirc.local

@@ -1,33 +1,9 @@
 import json
-import email
-from email.mime.text import MIMEText
-from unittest import mock
 import os
-import types
-import sys
 import ssl
+from email.mime.text import MIMEText
 
 import pytest
-
-# Provide dummy aiosmtplib for indirect imports via mailSender
-sys.modules.setdefault(
-    "aiosmtplib",
-    types.SimpleNamespace(SMTP=None, errors=types.SimpleNamespace(SMTPException=Exception)),
-)
-# Minimal stub for aiofiles used by mailSender imports
-sys.modules.setdefault(
-    "aiofiles",
-    types.SimpleNamespace(open=lambda *args, **kwargs: None),
-)
-# Minimal stub for jinja2 used by EmailSender imports
-sys.modules.setdefault(
-    "jinja2",
-    types.SimpleNamespace(
-        Environment=lambda **kwargs: types.SimpleNamespace(get_template=lambda name: types.SimpleNamespace(render=lambda **kw: "")),
-        FileSystemLoader=lambda *args, **kwargs: None,
-        select_autoescape=lambda x: None,
-    ),
-)
 
 from MailToolsBox.imapClient import ImapAgent, SecurityMode
 
@@ -38,40 +14,47 @@ class DummyMail:
         self.closed = False
         self.logged_in = False
         self.selected = None
+
     def login(self, user, password):
         self.logged_in = True
         return ("OK", [b""])
+
     def select(self, mailbox, readonly=True):
         self.selected = mailbox
-        return ('OK', [b''])
+        return ("OK", [b""])
+
     def uid(self, command, *args):
-        if command == 'search':
-            return ('OK', [b'1'])
-        elif command == 'fetch':
-            return ('OK', [(None, self.message_bytes)])
+        if command == "search":
+            return ("OK", [b"1"])
+        elif command == "fetch":
+            return ("OK", [(None, self.message_bytes)])
+
     def close(self):
         self.closed = True
+
     def logout(self):
         self.closed = True
+
     def __enter__(self):
         return self
+
     def __exit__(self, exc_type, exc, tb):
         pass
 
 
 def sample_message_bytes():
-    msg = MIMEText('body text')
-    msg['From'] = 'from@example.com'
-    msg['To'] = 'to@example.com'
-    msg['Subject'] = 'Test'
-    msg['Date'] = 'Wed, 20 Sep 2023 12:00:00 -0000'
+    msg = MIMEText("body text")
+    msg["From"] = "from@example.com"
+    msg["To"] = "to@example.com"
+    msg["Subject"] = "Test"
+    msg["Date"] = "Wed, 20 Sep 2023 12:00:00 -0000"
     return msg.as_bytes()
 
 
 def test_login_account(monkeypatch):
     dummy = DummyMail(sample_message_bytes())
-    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda *args, **kwargs: dummy)
-    agent = ImapAgent('user', 'pass', 'imap.example.com')
+    monkeypatch.setattr("imaplib.IMAP4_SSL", lambda *args, **kwargs: dummy)
+    agent = ImapAgent("user", "pass", "imap.example.com")
     agent.login_account()
     assert agent.mail is dummy
     assert dummy.logged_in
@@ -81,16 +64,16 @@ def test_login_account(monkeypatch):
 def test_download_mail_text(tmp_path, monkeypatch, trailing):
     message_bytes = sample_message_bytes()
     dummy = DummyMail(message_bytes)
-    agent = ImapAgent('user', 'pass', 'imap.example.com')
+    agent = ImapAgent("user", "pass", "imap.example.com")
     agent.mail = dummy
 
     path = str(tmp_path) + (os.sep if trailing else "")
     agent.download_mail_text(path=path)
 
-    file_path = tmp_path / 'email.txt'
+    file_path = tmp_path / "email.txt"
     assert file_path.exists()
     content = file_path.read_text()
-    assert 'body text' in content
+    assert "body text" in content
     assert dummy.closed
 
 
@@ -98,17 +81,17 @@ def test_download_mail_text(tmp_path, monkeypatch, trailing):
 def test_download_mail_json(tmp_path, monkeypatch, trailing):
     message_bytes = sample_message_bytes()
     dummy = DummyMail(message_bytes)
-    monkeypatch.setattr(ImapAgent, 'login_account', lambda self: None)
-    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda *args, **kwargs: dummy)
+    monkeypatch.setattr(ImapAgent, "login_account", lambda self: None)
+    monkeypatch.setattr("imaplib.IMAP4_SSL", lambda *args, **kwargs: dummy)
 
-    agent = ImapAgent('user', 'pass', 'imap.example.com')
+    agent = ImapAgent("user", "pass", "imap.example.com")
     path = str(tmp_path) + (os.sep if trailing else "")
     result = agent.download_mail_json(save=True, path=path)
 
     data = json.loads(result)
     assert isinstance(data, list)
-    assert data[0]['subject'] == 'Test'
-    file_path = tmp_path / 'mail.json'
+    assert data[0]["subject"] == "Test"
+    file_path = tmp_path / "mail.json"
     assert file_path.exists()
     assert dummy.closed
 
@@ -117,10 +100,11 @@ def test_download_mail_json(tmp_path, monkeypatch, trailing):
 def test_download_mail_msg(tmp_path, trailing):
     message_bytes = sample_message_bytes()
     dummy = DummyMail(message_bytes)
-    agent = ImapAgent('user', 'pass', 'imap.example.com')
-    agent.login_account = lambda: setattr(agent, 'mail', dummy)
+    agent = ImapAgent("user", "pass", "imap.example.com")
+    agent.login_account = lambda: setattr(agent, "mail", dummy)
     # avoid real network in _open
     import imaplib as _imaplib
+
     _orig_ssl = _imaplib.IMAP4_SSL
     _imaplib.IMAP4_SSL = lambda *a, **k: dummy
 
@@ -129,7 +113,7 @@ def test_download_mail_msg(tmp_path, trailing):
 
     _imaplib.IMAP4_SSL = _orig_ssl
 
-    file_path = tmp_path / 'email_0.msg'
+    file_path = tmp_path / "email_0.msg"
     assert file_path.exists()
 
 
@@ -147,9 +131,9 @@ def test_from_env(monkeypatch):
 
 def test_context_manager(monkeypatch):
     dummy = DummyMail(sample_message_bytes())
-    monkeypatch.setattr('imaplib.IMAP4_SSL', lambda *args, **kwargs: dummy)
+    monkeypatch.setattr("imaplib.IMAP4_SSL", lambda *args, **kwargs: dummy)
 
-    with ImapAgent('user', 'pass', 'imap.example.com') as agent:
+    with ImapAgent("user", "pass", "imap.example.com") as agent:
         assert agent.mail is dummy
         assert dummy.logged_in
     assert dummy.closed
@@ -171,7 +155,7 @@ def test_imap_plain_connection(monkeypatch):
         def starttls(self, ctx):
             self.started_tls = True
 
-    monkeypatch.setattr('imaplib.IMAP4', PlainIMAP)
+    monkeypatch.setattr("imaplib.IMAP4", PlainIMAP)
 
     client = ImapAgent(
         "user@example.com",

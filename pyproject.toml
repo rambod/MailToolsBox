@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "MailToolsBox"
+dynamic = ["version"]
+description = "Modern sync & async SMTP and IMAP for Python: TLS/SSL, OAuth2 XOAUTH2, Jinja2 templates, attachments, and high-volume bulk sending."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+authors = [{ name = "Rambod Ghashghai", email = "gh.rambod@gmail.com" }]
+keywords = [
+    "mail", "smtp", "imap", "email", "tls", "ssl", "oauth2", "xoauth2",
+    "jinja2", "asyncio", "aiosmtplib", "bulk-email", "email-validation",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Communications :: Email",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+dependencies = [
+    "Jinja2>=3.0.2",
+    "aiosmtplib>=2.0.0",
+    "aiofiles>=23.0.0",
+]
+
+[project.optional-dependencies]
+validation = ["email-validator>=2.0.0"]
+test = ["pytest>=7.0", "pytest-asyncio>=0.20", "aiosmtpd>=1.4"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.20",
+    "aiosmtpd>=1.4",
+    "mypy>=1.0",
+    "black>=24.0",
+    "ruff>=0.5",
+    "email-validator>=2.0.0",
+]
+docs = ["mkdocs>=1.5", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.24"]
+
+[project.urls]
+Homepage = "https://github.com/rambod/MailToolsBox"
+Source = "https://github.com/rambod/MailToolsBox"
+Issues = "https://github.com/rambod/MailToolsBox/issues"
+Changelog = "https://github.com/rambod/MailToolsBox/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["MailToolsBox"]
+
+[tool.setuptools.dynamic]
+version = { attr = "MailToolsBox._version.__version__" }
+
+[tool.setuptools.package-data]
+MailToolsBox = ["py.typed", "templates/*", "templates/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+# E/F = pyflakes+pycodestyle, I = import sorting, B = bugbear.
+# UP (pyupgrade) is intentionally omitted: the package supports Python 3.8,
+# where typing.List/Optional generics remain the clearest choice.
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]  # line length is enforced by black, not flagged here
+
+[tool.black]
+line-length = 100
+target-version = ["py38"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true

@@ -9,27 +9,22 @@ import logging
 import os
 import re
 import ssl
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from email.header import decode_header, make_header
 from email.message import Message
-from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
+
+from .exceptions import AuthenticationError, IMAPError
+from .security import SecurityMode, build_ssl_context
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-# ----------------------------- Security -----------------------------
-
-class SecurityMode(str, Enum):
-    AUTO = "auto"       # 993 -> SSL on connect, else try STARTTLS if server advertises it
-    STARTTLS = "starttls"
-    SSL = "ssl"         # implicit TLS on connect
-    NONE = "none"       # plaintext, only for trusted LANs
-
-
 # ----------------------------- Models -------------------------------
+
 
 @dataclass
 class MailAddress:
@@ -63,6 +58,7 @@ class MailItem:
 
 # --------------------------- Utilities ------------------------------
 
+
 def _decode_header_value(value: Optional[str]) -> str:
     if not value:
         return ""
@@ -80,6 +76,7 @@ def _decode_filename(value: Optional[str]) -> str:
     except Exception:
         return value
 
+
 def _parse_addresses(value: Optional[str]) -> List[MailAddress]:
     if not value:
         return []
@@ -88,6 +85,7 @@ def _parse_addresses(value: Optional[str]) -> List[MailAddress]:
     for name, addr in addrs:
         out.append(MailAddress(_decode_header_value(name) or None, addr or None))
     return out
+
 
 def _to_local_datetime(date_hdr: Optional[str]) -> Optional[dt.datetime]:
     if not date_hdr:
@@ -105,6 +103,7 @@ def _to_local_datetime(date_hdr: Optional[str]) -> Optional[dt.datetime]:
 
 
 # ----------------------------- Client --------------------------------
+
 
 class ImapClient:
     """
@@ -138,11 +137,7 @@ class ImapClient:
         self.oauth2_access_token = oauth2_access_token
         self.timeout = timeout
 
-        ctx = ssl_context or ssl.create_default_context()
-        if allow_invalid_certs:
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-        self.ssl_context = ctx
+        self.ssl_context = build_ssl_context(ssl_context, allow_invalid_certs=allow_invalid_certs)
 
         self.conn: Optional[imaplib.IMAP4] = None
         self.selected_mailbox: Optional[str] = None
@@ -150,7 +145,7 @@ class ImapClient:
     # --------- factories
 
     @classmethod
-    def from_env(cls) -> "ImapClient":
+    def from_env(cls) -> ImapClient:
         """
         Required: IMAP_EMAIL, IMAP_SERVER
         Optional: IMAP_PASSWORD, IMAP_PORT, IMAP_SECURITY, IMAP_OAUTH2_TOKEN, IMAP_ALLOW_INVALID_CERTS
@@ -175,7 +170,7 @@ class ImapClient:
 
     # --------- context manager
 
-    def __enter__(self) -> "ImapClient":
+    def __enter__(self) -> ImapClient:
         self.login()
         return self
 
@@ -196,7 +191,9 @@ class ImapClient:
 
         conn = imaplib.IMAP4(self.server_address, self.port)
         conn.timeout = self.timeout
-        if mode == SecurityMode.STARTTLS or (mode == SecurityMode.AUTO and "STARTTLS" in conn.capabilities):
+        if mode == SecurityMode.STARTTLS or (
+            mode == SecurityMode.AUTO and "STARTTLS" in conn.capabilities
+        ):
             conn.starttls(self.ssl_context)
             # capabilities may change after STARTTLS
             conn.capabilities = conn.capability()[1][0].split()  # refresh
@@ -205,17 +202,19 @@ class ImapClient:
     def _auth(self, conn: imaplib.IMAP4) -> None:
         if self.oauth2_access_token:
             # XOAUTH2: base64("user=<email>\x01auth=Bearer <token>\x01\x01")
-            raw = f"user={self.email_account}\x01auth=Bearer {self.oauth2_access_token}\x01\x01".encode("utf-8")
+            raw = f"user={self.email_account}\x01auth=Bearer {self.oauth2_access_token}\x01\x01".encode()
             xoauth = base64.b64encode(raw).decode("ascii")
             typ, resp = conn.authenticate("XOAUTH2", lambda _: xoauth)
             if typ != "OK":
-                raise RuntimeError(f"XOAUTH2 failed: {resp}")
+                raise AuthenticationError(f"XOAUTH2 failed: {resp!r}")
             return
         if self.password is None:
-            raise RuntimeError("No password or OAuth2 token provided for IMAP authentication")
+            raise AuthenticationError(
+                "No password or OAuth2 token provided for IMAP authentication"
+            )
         typ, resp = conn.login(self.email_account, self.password)
         if typ != "OK":
-            raise RuntimeError(f"IMAP login failed: {resp}")
+            raise AuthenticationError(f"IMAP login failed: {resp!r}")
 
     def login(self) -> None:
         if self.conn:
@@ -261,7 +260,7 @@ class ImapClient:
         self._ensure()
         typ, _ = self.conn.select(mailbox, readonly=readonly)
         if typ != "OK":
-            raise RuntimeError(f"Cannot select mailbox {mailbox}")
+            raise IMAPError(f"Cannot select mailbox {mailbox}")
         self.selected_mailbox = mailbox
 
     # --------- search and fetch
@@ -285,7 +284,7 @@ class ImapClient:
         self._ensure_selected()
         typ, data = self.conn.uid("fetch", uid, "(RFC822 FLAGS)")
         if typ != "OK" or not data or not isinstance(data[0], tuple):
-            raise RuntimeError(f"Failed to fetch UID {uid}")
+            raise IMAPError(f"Failed to fetch UID {uid}")
         raw: bytes = data[0][1]
         # FLAGS come in a separate item depending on server, normalize
         flags: List[str] = []
@@ -296,7 +295,7 @@ class ImapClient:
                     start = flags_blob.find("(")
                     end = flags_blob.find(")")
                     if start >= 0 and end > start:
-                        flags = flags_blob[start + 1:end].split()
+                        flags = flags_blob[start + 1 : end].split()
                         break
         except Exception:
             flags = []
@@ -338,7 +337,9 @@ class ImapClient:
 
                 if is_attach:
                     payload = part.get_payload(decode=True) or b""
-                    attachments.append(MailPart(ctype, charset, payload, filename=filename, is_attachment=True))
+                    attachments.append(
+                        MailPart(ctype, charset, payload, filename=filename, is_attachment=True)
+                    )
                     continue
 
                 if ctype == "text/plain":
@@ -445,11 +446,23 @@ class ImapClient:
 
     # --------- legacy style exports (modernized)
 
-    def download_mail_text(self, path: str = "", mailbox: str = "INBOX") -> Path:
+    @contextmanager
+    def _managed_session(self) -> Iterator[None]:
+        """Ensure a connection for the duration of a one-shot export.
+
+        Only tears the connection down if *this* call opened it; a connection
+        the caller already established (e.g. inside ``with ImapClient(...)``)
+        is left open.
         """
-        Dump all messages in a mailbox to a single UTF-8 text file.
-        """
-        self.login()
+        owned = self.conn is None
+        self._ensure()
+        try:
+            yield
+        finally:
+            if owned:
+                self.logout()
+
+    def _dump_text(self, path: str, mailbox: str) -> Path:
         self.select(mailbox)
         uids = self.search("ALL")
         lines: List[str] = []
@@ -464,21 +477,14 @@ class ImapClient:
             )
         out = Path(path) / "email.txt"
         out.write_text("".join(lines), encoding="utf-8")
-        self.logout()
         return out
 
-    def download_mail_json(
-        self,
-        lookup: str = "ALL",
-        save: bool = False,
-        path: str = "",
-        file_name: str = "mail.json",
-        mailbox: str = "INBOX",
-    ) -> str:
-        """
-        Return JSON of selected messages. Optionally save to disk.
-        """
-        self.login()
+    def download_mail_text(self, path: str = "", mailbox: str = "INBOX") -> Path:
+        """Dump all messages in a mailbox to a single UTF-8 text file."""
+        with self._managed_session():
+            return self._dump_text(path, mailbox)
+
+    def _dump_json(self, lookup: str, save: bool, path: str, file_name: str, mailbox: str) -> str:
         self.select(mailbox)
         uids = self.search(lookup)
         items = self.fetch_many(uids)
@@ -502,14 +508,21 @@ class ImapClient:
         if save:
             out = Path(path) / file_name
             out.write_text(s, encoding="utf-8")
-        self.logout()
         return s
 
-    def download_mail_eml(self, directory: str = "", lookup: str = "ALL", mailbox: str = "INBOX") -> List[Path]:
-        """
-        Save each selected message as an .eml file.
-        """
-        self.login()
+    def download_mail_json(
+        self,
+        lookup: str = "ALL",
+        save: bool = False,
+        path: str = "",
+        file_name: str = "mail.json",
+        mailbox: str = "INBOX",
+    ) -> str:
+        """Return JSON of selected messages. Optionally save to disk."""
+        with self._managed_session():
+            return self._dump_json(lookup, save, path, file_name, mailbox)
+
+    def _dump_eml(self, directory: str, lookup: str, mailbox: str) -> List[Path]:
         self.select(mailbox)
         uids = self.search(lookup)
         out_paths: List[Path] = []
@@ -521,8 +534,14 @@ class ImapClient:
             out = target_dir / file_name
             out.write_bytes(item.raw)
             out_paths.append(out)
-        self.logout()
         return out_paths
+
+    def download_mail_eml(
+        self, directory: str = "", lookup: str = "ALL", mailbox: str = "INBOX"
+    ) -> List[Path]:
+        """Save each selected message as an .eml file."""
+        with self._managed_session():
+            return self._dump_eml(directory, lookup, mailbox)
 
     # --------- internal guards
 
@@ -580,7 +599,7 @@ class ImapAgent(ImapClient):
         self.logout()
         self.mail = None
 
-    def __enter__(self) -> "ImapAgent":
+    def __enter__(self) -> ImapAgent:
         self.login_account()
         return self
 
@@ -595,9 +614,17 @@ class ImapAgent(ImapClient):
         super().logout()
         self.mail = None
 
+    # Legacy semantics: these one-shot exports always close the connection
+    # when done (the modern ImapClient versions leave a caller-owned
+    # connection open).
+
     def download_mail_text(self, path: str = "", mailbox: str = "INBOX") -> Path:
         self._sync_mail_alias()
-        return super().download_mail_text(path=path, mailbox=mailbox)
+        self.login()
+        try:
+            return self._dump_text(path, mailbox)
+        finally:
+            self.logout()
 
     def download_mail_json(
         self,
@@ -608,12 +635,16 @@ class ImapAgent(ImapClient):
         mailbox: str = "INBOX",
     ) -> str:
         self._sync_mail_alias()
-        return super().download_mail_json(lookup=lookup, save=save, path=path, file_name=file_name, mailbox=mailbox)
+        self.login()
+        try:
+            return self._dump_json(lookup, save, path, file_name, mailbox)
+        finally:
+            self.logout()
 
-    def download_mail_msg(self, path: str = "", lookup: str = "ALL", mailbox: str = "INBOX") -> List[Path]:
-        """
-        Save each selected message as a .msg file (wrapper over .eml bytes).
-        """
+    def download_mail_msg(
+        self, path: str = "", lookup: str = "ALL", mailbox: str = "INBOX"
+    ) -> List[Path]:
+        """Save each selected message as a .msg file (wrapper over .eml bytes)."""
         self._sync_mail_alias()
         self.login()
         try:

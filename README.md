@@ -13,10 +13,13 @@ MailToolsBox is a modern, pragmatic email toolkit for Python. It gives you clean
 - Gmail and Exchange Online presets
 - Jinja2 templates with auto plain text fallback
 - MIME smart attachment handling
-- Bulk sending helpers
+- **High-volume bulk sending**: connection reuse, retry with exponential backoff,
+  rate limiting, and bounded async concurrency
+- Structured exception hierarchy (`MailToolsBoxError` and subclasses)
+- Fully typed (`py.typed`) for editor and `mypy` support
 - Optional email validation (opt-in extra)
 - Environment variable configuration
-- Backward compatibility shim `SendAgent`
+- Backward compatibility shims `SendAgent` / `ImapAgent`
 
 ---
 
@@ -74,7 +77,8 @@ with ImapClient(
         print(m.subject, m.from_[0].email if m.from_ else None)
 ```
 
-> Tip: If you installed the package as a single module, import paths may be `from MailToolsBox import ImapClient`. Keep them consistent with your package layout.
+> All public classes are importable directly from the top-level package:
+> `from MailToolsBox import EmailSender, ImapClient, SecurityMode, RetryPolicy`.
 
 ---
 
@@ -157,12 +161,75 @@ asyncio.run(main())
 
 ### Bulk helpers
 
+`send_bulk` sends to each recipient individually (so recipients never see each
+other) while **reusing a single connection** — it skips the TLS handshake and
+AUTH round-trip that a naive per-message loop would repeat. It returns a report
+of what succeeded and what failed.
+
 ```python
-sender.send_bulk(
+report = sender.send_bulk(
     recipients=["a@example.com", "b@example.com"],
     subject="Announcement",
-    message_body="Sent individually to protect privacy"
+    message_body="Sent individually to protect privacy",
 )
+print(report["sent"])    # ["a@example.com", "b@example.com"]
+print(report["failed"])  # {address: exception, ...}
+```
+
+### High-volume sending: retries, rate limiting, concurrency
+
+For large organizations, configure a retry policy and a send rate. Retries use
+exponential backoff with jitter and automatically reconnect on a dropped
+connection; the rate limiter is a token bucket measured in messages/second.
+
+```python
+from MailToolsBox import EmailSender, RetryPolicy
+
+sender = EmailSender(
+    user_email="you@example.com",
+    server_smtp_address="smtp.example.com",
+    user_email_password="pw",
+    retry_policy=RetryPolicy(max_attempts=3, base_delay=0.5),
+    rate_limit=50,  # cap at 50 messages/second
+)
+
+sender.send_bulk(recipients=large_list, subject="News", message_body="...")
+```
+
+Async bulk sending bounds how many connections are open at once:
+
+```python
+await sender.send_bulk_async(
+    recipients=large_list,
+    subject="News",
+    message_body="...",
+    max_concurrency=20,   # at most 20 concurrent sends
+)
+```
+
+When you control the loop yourself, hold one connection open with a session:
+
+```python
+with sender.open_session() as session:
+    for user in users:
+        session.send([user.email], "Welcome", render(user))
+```
+
+### Error handling
+
+All errors derive from `MailToolsBoxError`, so you can catch broadly or narrowly:
+
+```python
+from MailToolsBox import AuthenticationError, SendError, MailToolsBoxError
+
+try:
+    sender.send(["to@example.com"], "Hi", "Body")
+except AuthenticationError:
+    ...  # bad credentials / token
+except SendError:
+    ...  # message rejected or transport failure
+except MailToolsBoxError:
+    ...  # anything else from the library
 ```
 
 ### Environment variables
@@ -243,7 +310,7 @@ eml_path = imap.save_eml(item, "./message.eml")
 
 ```python
 imap.mark_seen(item.uid)
-imap.add_flags(item.uid, "\Flagged")
+imap.add_flags(item.uid, "\\Flagged")
 imap.move([item.uid], "Archive")
 imap.delete(item.uid)
 imap.expunge()
@@ -343,9 +410,37 @@ legacy.send_mail(["to@example.com"], "Subject", "Body", tls=True)
 
 ```bash
 pip install -e ".[dev]"        # or: pip install -r requirements-dev.txt
-pytest
+pytest                         # unit + end-to-end tests
+ruff check MailToolsBox tests  # lint
+black --check MailToolsBox tests
+mypy MailToolsBox              # type check
 ```
-Tests are network-free and rely on local fakes, so they run quickly.
+
+Unit tests are network-free. The suite also includes end-to-end tests that
+spin up a real in-process SMTP server (via `aiosmtpd`) to exercise the actual
+sync and async transport code — no external network needed.
+
+---
+
+## Releasing
+
+Releases publish to PyPI automatically via GitHub Actions
+([`release.yml`](.github/workflows/release.yml)) using PyPI
+[Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC) — no
+API tokens are stored in the repository.
+
+1. Bump the version in [`MailToolsBox/_version.py`](MailToolsBox/_version.py)
+   (single source of truth) and update [`CHANGELOG.md`](CHANGELOG.md).
+2. Commit, then tag and push: `git tag v3.0.0 && git push origin v3.0.0`.
+3. The workflow verifies the tag matches the package version, builds the sdist
+   and wheel, runs `twine check`, and publishes.
+
+To build locally without publishing:
+
+```bash
+python -m build
+twine check dist/*
+```
 
 ---
 
